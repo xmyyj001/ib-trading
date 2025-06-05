@@ -19,10 +19,18 @@ class Environment:
             self._env = {k: v for k, v in environ.items() if k in self.ENV_VARS}
             self._trading_mode = trading_mode
             # get secrets and update config
+            # get secrets and update config
+            secrets = {}
+            if 'IB_USERNAME' in environ and 'IB_PASSWORD' in environ:
+                secrets['ibLoginId'] = environ.get('IB_USERNAME')
+                secrets['ibPassword'] = environ.get('IB_PASSWORD')
+            else:
+                secrets = self.get_secret(self.SECRET_RESOURCE.format(self._env['PROJECT_ID'], self._trading_mode))
+
             config = {
                 **ibc_config,
                 'tradingMode': self._trading_mode,
-                **self.get_secret(self.SECRET_RESOURCE.format(self._env['PROJECT_ID'], self._trading_mode))
+                **secrets
             }
             self._logging.debug({**config, 'password': 'xxx'})
 
