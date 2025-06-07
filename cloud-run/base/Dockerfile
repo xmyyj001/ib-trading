@@ -11,7 +11,7 @@ ENV TWS_INSTALL_LOG=/root/Jts/tws_install.log \
 # install dependencies
 RUN  apt-get update \
   && apt-get upgrade -y \
-  && apt-get install --no-install-recommends -y wget unzip xvfb libxtst6 libxrender1 python3.9-dev build-essential net-tools openjfx \
+  && apt-get install --no-install-recommends -y wget unzip xvfb libxtst6 libxrender1 python3-dev build-essential net-tools openjfx \
   && apt-get clean \
   && apt-get -y autoremove
 #RUN apt-get install -y procps
