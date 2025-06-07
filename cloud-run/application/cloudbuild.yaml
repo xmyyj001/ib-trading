@@ -5,10 +5,13 @@ steps:
   args:
   - "-c"
   - |
-    IMAGE_TAGS=($(gcloud container images list-tags eu.gcr.io/${PROJECT_ID}/cloud-run/application --format "value(tags)"))
-    if [[ ! "$${IMAGE_TAGS[@]}" =~ "${SHORT_SHA}" ]]
-    then
-      gcloud builds submit --tag gcr.io/${PROJECT_ID}/cloud-run/application:${SHORT_SHA} cloud-run/application/ --gcs-source-staging-dir gs://${PROJECT_ID}-cloudbuild/source
+    # Check if image with tag exists in Artifact Registry
+    if ! gcloud artifacts docker images list europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo --filter="tags=${SHORT_SHA}" --format="value(tags)" | grep -q "${SHORT_SHA}"; then
+      # Build and push to Artifact Registry
+      gcloud builds submit \
+        --tag europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${SHORT_SHA} \
+        --gcs-source-staging-dir gs://${PROJECT_ID}-cloudbuild/source \
+        cloud-run/application/
     fi
 #### run safety check
 - name: "gcr.io/cloud-builders/docker"
@@ -16,7 +19,7 @@ steps:
   - "run"
   - "--entrypoint"
   - "bash"
-  - "gcr.io/${PROJECT_ID}/cloud-run/application:${SHORT_SHA}"
+  - "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${SHORT_SHA}"
   - "-c"
   - "pip install safety && safety check --bare"
 #### run unittests
@@ -25,7 +28,7 @@ steps:
   - "run"
   - "--entrypoint"
   - "python"
-  - "gcr.io/${PROJECT_ID}/cloud-run/application:${SHORT_SHA}"
+  - "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${SHORT_SHA}"
   - "-m"
   - "unittest"
   - "discover"
@@ -45,7 +48,7 @@ steps:
   - "K_REVISION=cloudbuild"
   - "--entrypoint"
   - "bash"
-  - "gcr.io/${PROJECT_ID}/cloud-run/application:${SHORT_SHA}"
+  - "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${SHORT_SHA}"
   - "-c"
   - "/usr/bin/Xvfb $$DISPLAY -ac -screen 0 1024x768x16 +extension RANDR & python ./_tests/integration_tests.py"
 #### deploy new revision
@@ -55,7 +58,7 @@ steps:
   - "deploy"
   - "ib-${_TRADING_MODE}"
   - "--image"
-  - "eu.gcr.io/${PROJECT_ID}/cloud-run/application:${SHORT_SHA}"
+  - "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${SHORT_SHA}"
   - "--region"
   - "${_GCP_REGION}"
   - "--platform"
@@ -92,13 +95,13 @@ steps:
       then
         REVISION_TAGS=("${SHORT_SHA}" $${REVISION_TAGS[@]})
       fi
-      IMAGE_TAGS=($(gcloud container images list-tags eu.gcr.io/${PROJECT_ID}/cloud-run/application --format "value(tags)"))
+      IMAGE_TAGS=($(gcloud artifacts docker images list europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application --format "value(tags)"))
       for tag in "$${IMAGE_TAGS[@]}"
       do
         if [[ ! "$${REVISION_TAGS[@]}" =~ "$${tag}" ]]
         then
-          # echo "gcloud container images delete eu.gcr.io/${PROJECT_ID}/cloud-run/application:$${tag}"
-          yes | gcloud container images delete eu.gcr.io/${PROJECT_ID}/cloud-run/application:$${tag}
+          # echo "gcloud artifacts docker images delete europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:$${tag}"
+          yes | gcloud artifacts docker images delete europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:$${tag}
         fi
       done
     fi
