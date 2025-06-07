@@ -8,7 +8,7 @@ steps:
     IMAGE_TAGS=($(gcloud container images list-tags eu.gcr.io/${PROJECT_ID}/cloud-run/application --format "value(tags)"))
     if [[ ! "$${IMAGE_TAGS[@]}" =~ "${SHORT_SHA}" ]]
     then
-      gcloud builds submit --tag eu.gcr.io/${PROJECT_ID}/cloud-run/application:${SHORT_SHA} cloud-run/application/ --gcs-source-staging-dir gs://${PROJECT_ID}-cloudbuild/source
+      gcloud builds submit --tag gcr.io/${PROJECT_ID}/cloud-run/application:${SHORT_SHA} cloud-run/application/ --gcs-source-staging-dir gs://${PROJECT_ID}-cloudbuild/source
     fi
 #### run safety check
 - name: "gcr.io/cloud-builders/docker"
