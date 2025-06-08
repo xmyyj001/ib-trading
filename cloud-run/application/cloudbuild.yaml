@@ -5,6 +5,12 @@ steps:
   args:
   - "-c"
   - |
+    echo "Cloud Build's SHORT_SHA is: '${SHORT_SHA}'" # <-- 添加这行
+    echo "Cloud Build's COMMIT_SHA is: '${COMMIT_SHA}'" # <-- 添加这行
+    echo "Cloud Build's REPO_NAME is: '${REPO_NAME}'" # <-- 添加这行
+    echo "Cloud Build's BRANCH_NAME is: '${BRANCH_NAME}'" # <-- 添加这行
+
+
     # Configure Docker to authenticate with Artifact Registry
     gcloud auth configure-docker europe-docker.pkg.dev --quiet
     
