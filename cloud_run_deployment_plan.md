@@ -136,6 +136,39 @@ graph TD
         cd ../..
         ```
 
+**创建 Artifact Registry 仓库：**
+
+gcloud artifacts repositories create cloud-run-repo \
+    --repository-format=docker \
+    --location=europe \
+    --description="Docker repository for Cloud Run applications"
+
+bash
+
+
+请注意，cloudbuild.yaml 中使用了 europe-docker.pkg.dev，因此仓库位置必须是 europe。
+
+配置 Docker 认证：
+
+gcloud auth configure-docker europe-docker.pkg.dev
+
+bash
+
+
+这将配置 Docker 客户端以使用您的 Google Cloud 凭据向 Artifact Registry 进行身份验证。
+
+再次尝试运行 Cloud Build 部署：
+
+gcloud builds submit --config cloud-run/application/cloudbuild.yaml \
+    --substitutions=_TRADING_MODE=paper,_GCP_REGION=asia-east1 \
+    .
+
+bash
+
+
+请执行这些步骤，并告诉我结果。
+
+
 5.  **配置 Cloud Build 触发器**
     *   为了自动化部署，建议在 Google Cloud Console 中为你的代码仓库设置一个 Cloud Build 触发器。
     *   导航到 Cloud Build -> Triggers。

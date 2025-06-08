@@ -6,7 +6,7 @@ steps:
   - "-c"
   - |
     # Check if image with tag exists in Artifact Registry
-    if ! gcloud artifacts docker images list europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo --filter="tags=${SHORT_SHA}" --format="value(tags)" | grep -q "${SHORT_SHA}"; then
+    if ! gcloud artifacts docker images list europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo --filter="tags~'${SHORT_SHA}'" --format="value(tags)" | grep -q "${SHORT_SHA}"; then
       # Build and push to Artifact Registry
       gcloud builds submit \
         --tag europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${SHORT_SHA} \
