@@ -9,31 +9,25 @@ steps:
     echo "Cloud Build's default SHORT_SHA (for reference, not used for tagging): '${SHORT_SHA}'"
     echo "Cloud Build's default COMMIT_SHA (for reference): '${COMMIT_SHA}'"
 
-    # Configure Docker to authenticate with Artifact Registry
-    # europe-docker.pkg.dev 应该已经包含了对 eu.gcr.io 这个仓库的认证 (因为它们都在同一个域名下)
     gcloud auth configure-docker europe-docker.pkg.dev --quiet
 
-    # Construct the full image name for the image being built, using the explicitly passed _MY_IMAGE_TAG
     TARGET_IMAGE="europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG}"
-    # Path to the repository where TARGET_IMAGE will be stored (for listing existing tags)
     TARGET_IMAGE_REPO_PATH="europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application"
 
     echo "Checking if image $${TARGET_IMAGE} exists..."
-    # Use _MY_IMAGE_TAG for filtering
     if ! gcloud artifacts docker images list "$${TARGET_IMAGE_REPO_PATH}" --filter="tags~'^${_MY_IMAGE_TAG}$'" --format="value(tags)" | grep -q "^${_MY_IMAGE_TAG}$"; then
       echo "Image $${TARGET_IMAGE} not found. Building and pushing..."
       
-      # Cloud Build的 ${PROJECT_ID} 通常已经是小写的，但为了保险起见
       LOWERCASE_PROJECT_ID=$(echo "${PROJECT_ID}" | tr '[:upper:]' '[:lower:]')
-      # Artifact Registry 仓库名 (这里是 eu.gcr.io)
       ARTIFACT_REGISTRY_BASE_REPO_NAME="eu.gcr.io" 
 
+      # 确保反斜杠 (\) 是物理行的最后一个字符，后面没有注释或空格
       docker build \
         --build-arg GCP_PROJECT_ID="$${LOWERCASE_PROJECT_ID}" \
         --build-arg AR_REPO_NAME="$${ARTIFACT_REGISTRY_BASE_REPO_NAME}" \
-        --build-arg BASE_IMAGE_TAG=latest \ # 您基础镜像的标签是 'latest'
+        --build-arg BASE_IMAGE_TAG=latest \
         -t "$${TARGET_IMAGE}" \
-        cloud-run/application/ # Dockerfile的上下文路径
+        cloud-run/application/ # Dockerfile的上下文路径，这是 docker build 的最后一个参数
       
       docker push "$${TARGET_IMAGE}"
       echo "Image $${TARGET_IMAGE} built and pushed."
