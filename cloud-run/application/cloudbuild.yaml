@@ -1,79 +1,88 @@
 steps:
 #### build and push Docker image if not existing yet
-- name: "google/cloud-sdk:slim" # Changed from gcr.io/cloud-builders/gcloud-slim
+- name: "google/cloud-sdk:slim"
   entrypoint: "bash"
   args:
   - "-c"
   - |
     # Configure Docker to authenticate with Artifact Registry
-    # This ensures docker can push to your europe-docker.pkg.dev repository
     gcloud auth configure-docker europe-docker.pkg.dev --quiet
     
-    IMAGE_NAME="europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application"
-    IMAGE_TAG="${SHORT_SHA}"
-    FULL_IMAGE_NAME="${IMAGE_NAME}:${IMAGE_TAG}"
+    # Define shell variables. 
+    # `${PROJECT_ID}` and `${SHORT_SHA}` are substituted by Cloud Build before bash runs.
+    # The shell variables themselves (IMAGE_NAME_SVAR, etc.) are for bash.
+    # Bash will see: IMAGE_NAME_SVAR="europe-docker.pkg.dev/actual-project-id/cloud-run-repo/application"
+    IMAGE_NAME_SVAR="europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application"
+    # Bash will see: IMAGE_TAG_SVAR="actual-short-sha"
+    IMAGE_TAG_SVAR="${SHORT_SHA}"
+    
+    # When Cloud Build processes the line below, it sees $${IMAGE_NAME_SVAR} and $${IMAGE_TAG_SVAR}.
+    # It converts $$ to $, so bash sees: FULL_IMAGE_NAME_SVAR="$IMAGE_NAME_SVAR:$IMAGE_TAG_SVAR"
+    # Bash then expands its $IMAGE_NAME_SVAR and $IMAGE_TAG_SVAR.
+    FULL_IMAGE_NAME_SVAR="$${IMAGE_NAME_SVAR}:$${IMAGE_TAG_SVAR}"
 
-    echo "Checking if image ${FULL_IMAGE_NAME} exists..."
-    # Check if image with tag exists in Artifact Registry
-    # Use gcloud to check. If grep finds nothing (image doesn't exist), grep returns 1.
-    # The '!' inverts this, so the 'if' block executes if the image is NOT found.
-    if ! gcloud artifacts docker images list "${IMAGE_NAME}" --filter="tags~'^${IMAGE_TAG}$'" --format="value(tags)" | grep -q "^${IMAGE_TAG}$"; then
-      echo "Image ${FULL_IMAGE_NAME} not found. Building and pushing..."
-      # Build and push directly to Artifact Registry
-      docker build -t "${FULL_IMAGE_NAME}" cloud-run/application/
-      docker push "${FULL_IMAGE_NAME}"
-      echo "Image ${FULL_IMAGE_NAME} built and pushed."
+    echo "Checking if image $${FULL_IMAGE_NAME_SVAR} exists..."
+    # Similarly, here Cloud Build converts $$ to $, so bash sees the shell variables for expansion.
+    if ! gcloud artifacts docker images list "$${IMAGE_NAME_SVAR}" --filter="tags~'^$${IMAGE_TAG_SVAR}$'" --format="value(tags)" | grep -q "^$${IMAGE_TAG_SVAR}$"; then
+      echo "Image $${FULL_IMAGE_NAME_SVAR} not found. Building and pushing..."
+      docker build -t "$${FULL_IMAGE_NAME_SVAR}" cloud-run/application/
+      docker push "$${FULL_IMAGE_NAME_SVAR}"
+      echo "Image $${FULL_IMAGE_NAME_SVAR} built and pushed."
     else
-      echo "Image ${FULL_IMAGE_NAME} already exists. Skipping build and push."
+      echo "Image $${FULL_IMAGE_NAME_SVAR} already exists. Skipping build and push."
     fi
+
 #### run safety check
 - name: "gcr.io/cloud-builders/docker"
   args:
   - "run"
   - "--entrypoint"
   - "bash"
-  - "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${SHORT_SHA}"
+  - "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${SHORT_SHA}" # These are CB subs, no $$ needed
   - "-c"
-  - "pip install safety && safety check --bare || true" # Added '|| true' to make it non-blocking if you prefer
+  - "pip install safety && safety check --bare || true"
+
 #### run unittests
 - name: "gcr.io/cloud-builders/docker"
   args:
   - "run"
   - "--entrypoint"
   - "python"
-  - "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${SHORT_SHA}"
+  - "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${SHORT_SHA}" # CB subs
   - "-m"
   - "unittest"
   - "discover"
   - "-p"
   - "test_*.py"
+
 #### run integration tests
 - name: "gcr.io/cloud-builders/docker"
   args:
   - "run"
   - "--network"
-  - "cloudbuild" # Make sure this network is available or necessary
+  - "cloudbuild"
   - "--env"
   - "PYTHONPATH=/home"
   - "--env"
-  - "PROJECT_ID=${PROJECT_ID}"
+  - "PROJECT_ID=${PROJECT_ID}" # CB sub
   - "--env"
   - "K_REVISION=cloudbuild"
   - "--entrypoint"
   - "bash"
-  - "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${SHORT_SHA}"
+  - "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${SHORT_SHA}" # CB subs
   - "-c"
-  - "/usr/bin/Xvfb :0 -ac -screen 0 1024x768x16 +extension RANDR & export DISPLAY=:0 && python ./_tests/integration_tests.py" # Ensure DISPLAY is set for python
+  - "/usr/bin/Xvfb :0 -ac -screen 0 1024x768x16 +extension RANDR & export DISPLAY=:0 && python ./_tests/integration_tests.py"
+
 #### deploy new revision
 - name: 'gcr.io/cloud-builders/gcloud-slim'
   args:
   - "run"
   - "deploy"
-  - "ib-${_TRADING_MODE}"
+  - "ib-${_TRADING_MODE}" # CB sub
   - "--image"
-  - "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${SHORT_SHA}"
+  - "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${SHORT_SHA}" # CB subs
   - "--region"
-  - "${_GCP_REGION}"
+  - "${_GCP_REGION}" # CB sub
   - "--platform"
   - "managed"
   - "--max-instances"
@@ -81,27 +90,28 @@ steps:
   - "--memory"
   - "2Gi"
   - "--service-account"
-  - "ib-trading@${PROJECT_ID}.iam.gserviceaccount.com"
+  - "ib-trading@${PROJECT_ID}.iam.gserviceaccount.com" # CB sub
   - "--revision-suffix"
-  - "${SHORT_SHA}"
+  - "${SHORT_SHA}" # CB sub
   - "--update-labels"
-  - "app=ib-trading,trading-mode=${_TRADING_MODE}"
+  - "app=ib-trading,trading-mode=${_TRADING_MODE}" # CB sub
   - "--update-env-vars"
-  - "PROJECT_ID=${PROJECT_ID},TRADING_MODE=${_TRADING_MODE}"
+  - "PROJECT_ID=${PROJECT_ID},TRADING_MODE=${_TRADING_MODE}" # CB subs
+
 #### delete old revision(s)
 - name: "gcr.io/cloud-builders/gcloud-slim"
   entrypoint: "bash"
   args:
   - "-c"
   - |
-    set -e # Exit immediately if a command exits with a non-zero status.
+    set -e 
+    # Cloud Build substitutions like ${_KEEP}, ${_TRADING_MODE}, ${_GCP_REGION}, ${PROJECT_ID}, ${SHORT_SHA}
+    # are replaced by Cloud Build before bash sees the script.
+    # Shell variables defined and used within this script need '$$' for expansion.
     if [[ "${_KEEP}" -gt "0" ]]; then
       echo "Cleaning up old revisions for service ib-${_TRADING_MODE} in region ${_GCP_REGION}, keeping last ${_KEEP} active revisions..."
-      # Get all revisions, sort by creation, identify those NOT serving traffic and beyond the _KEEP limit
-      # This is a bit complex; a simpler approach is to delete non-serving revisions first
       
-      # Get all revisions for the service and trading mode, sorted by creation timestamp descending
-      ALL_REVISIONS=($(gcloud run revisions list \
+      ALL_REVISIONS_ARR=($(gcloud run revisions list \
         --service="ib-${_TRADING_MODE}" \
         --platform="managed" \
         --region="${_GCP_REGION}" \
@@ -109,81 +119,65 @@ steps:
         --sort-by="~metadata.creationTimestamp" \
         --format="value(metadata.name)"))
 
-      echo "Found revisions: $${ALL_REVISIONS[@]}"
+      echo "Found revisions: $${ALL_REVISIONS_ARR[@]}"
 
-      # Revisions to delete: all revisions beyond the _KEEP count
-      # Ensure _KEEP is a number
-      re='^[0-9]+$'
-      if ! [[ "${_KEEP}" =~ $$re ]] ; then
+      SHELL_RE_NUM='^[0-9]+$'
+      if ! [[ "${_KEEP}" =~ $$SHELL_RE_NUM ]] ; then # $$SHELL_RE_NUM for bash to expand SHELL_RE_NUM
          echo "Error: _KEEP is not a number" >&2; exit 1
       fi
 
-      REVISIONS_TO_DELETE=()
-      if [ "$${#ALL_REVISIONS[@]}" -gt "${_KEEP}" ]; then
-        REVISIONS_TO_DELETE=($${ALL_REVISIONS[@]:$_KEEP})
+      REVISIONS_TO_DELETE_ARR=()
+      if [ "$${#ALL_REVISIONS_ARR[@]}" -gt "${_KEEP}" ]; then
+        REVISIONS_TO_DELETE_ARR=($${ALL_REVISIONS_ARR[@]:$_KEEP})
       fi
 
-      if [ "$${#REVISIONS_TO_DELETE[@]}" -gt 0 ]; then
-        echo "The following revisions will be deleted: $${REVISIONS_TO_DELETE[@]}"
-        for revision in "$${REVISIONS_TO_DELETE[@]}"; do
-          # Check if the revision is serving traffic. Only delete if not serving OR if it's an old one beyond _KEEP.
-          # The current logic just deletes based on age/count, assuming active ones are within _KEEP.
-          # A safer check would be to explicitly not delete revisions with traffic > 0%, unless they are very old.
-          # For simplicity with current _KEEP logic:
-          echo "Deleting revision: $${revision}"
-          yes | gcloud run revisions delete "$${revision}" --platform="managed" --region="${_GCP_REGION}" --quiet
+      if [ "$${#REVISIONS_TO_DELETE_ARR[@]}" -gt 0 ]; then
+        echo "The following revisions will be deleted: $${REVISIONS_TO_DELETE_ARR[@]}"
+        for shell_revision_var in "$${REVISIONS_TO_DELETE_ARR[@]}"; do
+          echo "Deleting revision: $${shell_revision_var}"
+          yes | gcloud run revisions delete "$${shell_revision_var}" --platform="managed" --region="${_GCP_REGION}" --quiet
         done
       else
         echo "No old revisions to delete beyond the _KEEP=${_KEEP} limit."
       fi
 
       echo "Cleaning up unused Docker image tags..."
-      # Get list of tags for images currently deployed in active revisions of THIS service
-      # This is tricky because a tag could be used by another service or a revision you want to keep manually.
-      # A safer approach is to only delete images whose tags correspond to revisions that were *just deleted* or are very old and not referenced.
-      # The original logic deletes any image tag not present in ANY revision tag (across all services if not filtered carefully).
-
-      # Get tags from ALL revisions in the current region (might be too broad if you have many services)
-      # Let's refine to get tags from revisions of the *current* service only
-      ACTIVE_REVISION_TAGS=()
-      # Get tags from the last _KEEP revisions of the current service
-      for rev_name in "$${ALL_REVISIONS[@]:0:$_KEEP}"; do
-        img_url=$(gcloud run revisions describe "$${rev_name}" --platform="managed" --region="${_GCP_REGION}" --format="value(spec.template.spec.containers[0].image)")
-        tag=$(echo "$${img_url}" | rev | cut -d: -f1 | rev) # Extracts tag from image_url:tag
-        if [[ -n "$${tag}" && "$${tag}" != "latest" ]]; then # Avoid 'latest' and empty tags
-             ACTIVE_REVISION_TAGS+=("$${tag}")
+      ACTIVE_REVISION_TAGS_ARR=()
+      for shell_rev_name_var in "$${ALL_REVISIONS_ARR[@]:0:$_KEEP}"; do
+        shell_img_url_var=$(gcloud run revisions describe "$${shell_rev_name_var}" --platform="managed" --region="${_GCP_REGION}" --format="value(spec.template.spec.containers[0].image)")
+        shell_tag_var=$(echo "$${shell_img_url_var}" | rev | cut -d: -f1 | rev)
+        if [[ -n "$${shell_tag_var}" && "$${shell_tag_var}" != "latest" ]]; then
+             ACTIVE_REVISION_TAGS_ARR+=("$${shell_tag_var}")
         fi
       done
-      # Add the current build's SHORT_SHA as it might not be deployed yet or might be one of the _KEEP
-      if [[ ! " $${ACTIVE_REVISION_TAGS[@]} " =~ " $${SHORT_SHA} " ]]; then
-        ACTIVE_REVISION_TAGS+=("${SHORT_SHA}")
+      
+      # ${SHORT_SHA} is a Cloud Build substitution, so it's directly available to bash after CB processing.
+      # Here we are comparing elements of a bash array $${ACTIVE_REVISION_TAGS_ARR[@]} with the value of ${SHORT_SHA}
+      if [[ ! " $${ACTIVE_REVISION_TAGS_ARR[@]} " =~ " ${SHORT_SHA} " ]]; then
+        ACTIVE_REVISION_TAGS_ARR+=("${SHORT_SHA}") # Add the CB resolved SHORT_SHA to the bash array
       fi
-      # Make unique
-      ACTIVE_REVISION_TAGS_UNIQUE=($(echo "$${ACTIVE_REVISION_TAGS[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
-      echo "Active or recent revision tags to keep: $${ACTIVE_REVISION_TAGS_UNIQUE[@]}"
+      
+      ACTIVE_REVISION_TAGS_UNIQUE_ARR=($(echo "$${ACTIVE_REVISION_TAGS_ARR[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
+      echo "Active or recent revision tags to keep: $${ACTIVE_REVISION_TAGS_UNIQUE_ARR[@]}"
 
-      ALL_IMAGE_TAGS=($(gcloud artifacts docker images list "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application" --format="value(tags)" --filter="tags:*"))
-      echo "All image tags in repository: $${ALL_IMAGE_TAGS[@]}"
+      ALL_IMAGE_TAGS_ARR=($(gcloud artifacts docker images list "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application" --format="value(tags)" --filter="tags:*"))
+      echo "All image tags in repository: $${ALL_IMAGE_TAGS_ARR[@]}"
 
-      for tag in $${ALL_IMAGE_TAGS[@]}; do
-        # Skip if tag is empty or 'latest'
-        if [[ -z "$${tag}" || "$${tag}" == "latest" ]]; then
+      for shell_tag_iter_var in $${ALL_IMAGE_TAGS_ARR[@]}; do
+        if [[ -z "$${shell_tag_iter_var}" || "$${shell_tag_iter_var}" == "latest" ]]; then
           continue
         fi
-        # Check if this tag is in our list of tags to keep
-        SHOULD_KEEP=false
-        for keep_tag in $${ACTIVE_REVISION_TAGS_UNIQUE[@]}; do
-          if [[ "$${tag}" == "$${keep_tag}" ]]; then
-            SHOULD_KEEP=true
+        SHELL_SHOULD_KEEP_BOOL=false # Bash variable
+        for shell_keep_tag_var in $${ACTIVE_REVISION_TAGS_UNIQUE_ARR[@]}; do
+          if [[ "$${shell_tag_iter_var}" == "$${shell_keep_tag_var}" ]]; then
+            SHELL_SHOULD_KEEP_BOOL=true
             break
           fi
         done
 
-        if ! $${SHOULD_KEEP}; then
-          echo "Deleting image tag: europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:$${tag}"
-          # Use --delete-tags flag to delete specific tags without deleting the manifest if other tags point to it.
-          # If it's the last tag, the image manifest might be deleted.
-          yes | gcloud artifacts docker images delete "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:$${tag}" --quiet
+        if ! $${SHELL_SHOULD_KEEP_BOOL}; then
+          echo "Deleting image tag: europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:$${shell_tag_iter_var}"
+          yes | gcloud artifacts docker images delete "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:$${shell_tag_iter_var}" --delete-tags --quiet # Added --delete-tags for clarity, though it's default for specific tags
         fi
       done
     else
@@ -195,5 +189,4 @@ substitutions:
   _TRADING_MODE: paper # Default, can be overridden by --substitutions
   _KEEP: "3" # Number of active/recent revisions and corresponding image tags to keep
 
-# It's good practice to also specify a timeout for the build
 timeout: "1200s" # 20 minutes
