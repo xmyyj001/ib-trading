@@ -11,6 +11,7 @@ steps:
       gcloud builds submit \
         --tag europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${SHORT_SHA} \
         --gcs-source-staging-dir gs://${PROJECT_ID}-cloudbuild/source \
+        --substitutions SHORT_SHA=${SHORT_SHA} \
         cloud-run/application/
     fi
 #### run safety check
