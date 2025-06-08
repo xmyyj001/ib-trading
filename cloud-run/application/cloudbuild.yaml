@@ -8,28 +8,19 @@ steps:
     # Configure Docker to authenticate with Artifact Registry
     gcloud auth configure-docker europe-docker.pkg.dev --quiet
     
-    # Define shell variables. 
-    # `${PROJECT_ID}` and `${SHORT_SHA}` are substituted by Cloud Build before bash runs.
-    # The shell variables themselves (IMAGE_NAME_SVAR, etc.) are for bash.
-    # Bash will see: IMAGE_NAME_SVAR="europe-docker.pkg.dev/actual-project-id/cloud-run-repo/application"
-    IMAGE_NAME_SVAR="europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application"
-    # Bash will see: IMAGE_TAG_SVAR="actual-short-sha"
-    IMAGE_TAG_SVAR="${SHORT_SHA}"
-    
-    # When Cloud Build processes the line below, it sees $${IMAGE_NAME_SVAR} and $${IMAGE_TAG_SVAR}.
-    # It converts $$ to $, so bash sees: FULL_IMAGE_NAME_SVAR="$IMAGE_NAME_SVAR:$IMAGE_TAG_SVAR"
-    # Bash then expands its $IMAGE_NAME_SVAR and $IMAGE_TAG_SVAR.
-    FULL_IMAGE_NAME_SVAR="$${IMAGE_NAME_SVAR}:$${IMAGE_TAG_SVAR}"
+    # Construct the full image name directly using Cloud Build substitutions
+    TARGET_IMAGE="europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${SHORT_SHA}"
+    IMAGE_REPO_PATH="europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application" # For the list command
 
-    echo "Checking if image $${FULL_IMAGE_NAME_SVAR} exists..."
-    # Similarly, here Cloud Build converts $$ to $, so bash sees the shell variables for expansion.
-    if ! gcloud artifacts docker images list "$${IMAGE_NAME_SVAR}" --filter="tags~'^$${IMAGE_TAG_SVAR}$'" --format="value(tags)" | grep -q "^$${IMAGE_TAG_SVAR}$"; then
-      echo "Image $${FULL_IMAGE_NAME_SVAR} not found. Building and pushing..."
-      docker build -t "$${FULL_IMAGE_NAME_SVAR}" cloud-run/application/
-      docker push "$${FULL_IMAGE_NAME_SVAR}"
-      echo "Image $${FULL_IMAGE_NAME_SVAR} built and pushed."
+    echo "Checking if image $${TARGET_IMAGE} exists..."
+    # Use Cloud Build substitutions directly in the gcloud command arguments for filtering
+    if ! gcloud artifacts docker images list "$${IMAGE_REPO_PATH}" --filter="tags~'^${SHORT_SHA}$'" --format="value(tags)" | grep -q "^${SHORT_SHA}$"; then
+      echo "Image $${TARGET_IMAGE} not found. Building and pushing..."
+      docker build -t "$${TARGET_IMAGE}" cloud-run/application/
+      docker push "$${TARGET_IMAGE}"
+      echo "Image $${TARGET_IMAGE} built and pushed."
     else
-      echo "Image $${FULL_IMAGE_NAME_SVAR} already exists. Skipping build and push."
+      echo "Image $${TARGET_IMAGE} already exists. Skipping build and push."
     fi
 
 #### run safety check
