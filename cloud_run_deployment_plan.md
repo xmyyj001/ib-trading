@@ -157,16 +157,7 @@ graph TD
 
     这将配置 Docker 客户端以使用您的 Google Cloud 凭据向 Artifact Registry 进行身份验证。
 
-    再次尝试运行 Cloud Build 部署：
-
-    ```bash
-    gcloud builds submit --config cloud-run/application/cloudbuild.yaml \
-        --substitutions=_TRADING_MODE=paper,_GCP_REGION=asia-east1 \
-        .
-    ```
-
-
-请执行这些步骤，并告诉我结果。
+以上几个步骤是在建立触发器之前要先运行的？。
 
 
 5.  **配置 Cloud Build 触发器**
@@ -188,13 +179,21 @@ graph TD
 6.  **运行 Cloud Build 部署**
     *   如果你已经设置了 Cloud Build 触发器，只需将代码推送到配置的分支即可触发部署。
     *   如果你想手动触发，可以使用以下命令：
-        ```bash
+        <!-- ```bash
         gcloud builds submit --config cloud-run/application/cloudbuild.yaml \
             --substitutions=_TRADING_MODE=paper,_GCP_REGION=asia-east1 \
             .
         ```
-        请确保 `_TRADING_MODE` 和 `_GCP_REGION` 的值与你的需求一致。
+        请确保 `_TRADING_MODE` 和 `_GCP_REGION` 的值与你的需求一致。 -->
 
+        ```
+        GIT_TAG=$(git rev-parse --short HEAD)
+        ```
+        then:
+        ```
+        gcloud builds submit --config cloud-run/application/cloudbuild.yaml \
+        --substitutions=_TRADING_MODE=paper,_GCP_REGION=asia-east1,_MY_IMAGE_TAG=${GIT_TAG:-manual-latest} .
+        ```
 7.  **验证 Cloud Run 服务**
     *   部署完成后，你可以在 Google Cloud Console 的 Cloud Run 页面查看你的服务状态。
     *   服务名称将是 `ib-paper` (如果 `_TRADING_MODE` 是 `paper`)。
