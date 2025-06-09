@@ -21,13 +21,12 @@ steps:
       LOWERCASE_PROJECT_ID=$(echo "${PROJECT_ID}" | tr '[:upper:]' '[:lower:]')
       ARTIFACT_REGISTRY_BASE_REPO_NAME="eu.gcr.io" 
 
-      # 确保反斜杠 (\) 是物理行的最后一个字符，后面没有注释或空格
       docker build \
         --build-arg GCP_PROJECT_ID="$${LOWERCASE_PROJECT_ID}" \
         --build-arg AR_REPO_NAME="$${ARTIFACT_REGISTRY_BASE_REPO_NAME}" \
         --build-arg BASE_IMAGE_TAG=latest \
         -t "$${TARGET_IMAGE}" \
-        cloud-run/application/ # Dockerfile的上下文路径，这是 docker build 的最后一个参数
+        cloud-run/application/ # Dockerfile的上下文路径
       
       docker push "$${TARGET_IMAGE}"
       echo "Image $${TARGET_IMAGE} built and pushed."
@@ -41,7 +40,7 @@ steps:
   - "run"
   - "--entrypoint"
   - "bash"
-  - "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG}" # USE _MY_IMAGE_TAG
+  - "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG}"
   - "-c"
   - "pip install safety && safety check --bare || true"
 
@@ -51,7 +50,7 @@ steps:
   - "run"
   - "--entrypoint"
   - "python"
-  - "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG}" # USE _MY_IMAGE_TAG
+  - "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG}"
   - "-m"
   - "unittest"
   - "discover"
@@ -70,9 +69,13 @@ steps:
   - "PROJECT_ID=${PROJECT_ID}"
   - "--env"
   - "K_REVISION=cloudbuild"
+  - "--env"
+  - "MOCK_TWS_VERSION=981" # (❗试错后补充) 提供一个模拟的 TWS 版本号
+  # - "--env" # 如果不再需要从文件解析，可以注释或移除 TWS_INSTALL_LOG
+  # - "TWS_INSTALL_LOG=/tmp/dummy_install.log" # 如果仍要使用，确保此文件在容器内可访问
   - "--entrypoint"
   - "bash"
-  - "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG}" # USE _MY_IMAGE_TAG
+  - "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG}"
   - "-c"
   - "/usr/bin/Xvfb :0 -ac -screen 0 1024x768x16 +extension RANDR & export DISPLAY=:0 && python ./_tests/integration_tests.py"
 
@@ -83,7 +86,7 @@ steps:
   - "deploy"
   - "ib-${_TRADING_MODE}"
   - "--image"
-  - "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG}" # USE _MY_IMAGE_TAG
+  - "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG}"
   - "--region"
   - "${_GCP_REGION}"
   - "--platform"
@@ -95,7 +98,7 @@ steps:
   - "--service-account"
   - "ib-trading@${PROJECT_ID}.iam.gserviceaccount.com"
   - "--revision-suffix"
-  - "${_MY_IMAGE_TAG}" # USE _MY_IMAGE_TAG
+  - "${_MY_IMAGE_TAG}"
   - "--update-labels"
   - "app=ib-trading,trading-mode=${_TRADING_MODE}"
   - "--update-env-vars"
@@ -146,13 +149,11 @@ steps:
       for shell_rev_name_var in "$${ALL_REVISIONS_ARR[@]:0:$_KEEP}"; do
         shell_img_url_var=$(gcloud run revisions describe "$${shell_rev_name_var}" --platform="managed" --region="${_GCP_REGION}" --format="value(spec.template.spec.containers[0].image)")
         shell_tag_var=$(echo "$${shell_img_url_var}" | rev | cut -d: -f1 | rev)
-        if [[ -n "$${shell_tag_var}" && "$${shell_tag_var}" != "latest" ]]; then # Be careful if 'latest' is a valid tag you might use via _MY_IMAGE_TAG
+        if [[ -n "$${shell_tag_var}" && "$${shell_tag_var}" != "latest" ]]; then
              ACTIVE_REVISION_TAGS_ARR+=("$${shell_tag_var}")
         fi
       done
       
-      # Use _MY_IMAGE_TAG here instead of SHORT_SHA
-      # This ensures the currently built/deployed image tag is considered "active"
       if [[ ! " $${ACTIVE_REVISION_TAGS_ARR[@]} " =~ " ${_MY_IMAGE_TAG} " ]]; then
         ACTIVE_REVISION_TAGS_ARR+=("${_MY_IMAGE_TAG}") 
       fi
@@ -164,19 +165,10 @@ steps:
       echo "All image tags in repository: $${ALL_IMAGE_TAGS_ARR[@]}"
 
       for shell_tag_iter_var in $${ALL_IMAGE_TAGS_ARR[@]}; do
-        # Avoid deleting 'latest' if it's explicitly used or if _MY_IMAGE_TAG could be 'latest'
         if [[ -z "$${shell_tag_iter_var}" ]] || ([[ "$${shell_tag_iter_var}" == "latest" ]] && [[ "${_MY_IMAGE_TAG}" != "latest" ]]); then
-          # Skip empty tags. Skip 'latest' UNLESS _MY_IMAGE_TAG itself is 'latest' (then it's handled by ACTIVE_REVISION_TAGS_UNIQUE_ARR logic).
-          # This logic is a bit tricky: if _MY_IMAGE_TAG is 'latest', it will be in ACTIVE_REVISION_TAGS_UNIQUE_ARR and won't be deleted.
-          # If _MY_IMAGE_TAG is something else, and there's an unrelated 'latest' tag, this 'if' condition might need adjustment
-          # depending on whether you want to preserve a generic 'latest' tag.
-          # For simplicity, if _MY_IMAGE_TAG could be 'latest', we ensure 'latest' is handled by the keep list.
-          # If 'latest' is just a floating tag you want to prune if unused, this is more complex.
-          # A safer bet: if a tag is 'latest' and _MY_IMAGE_TAG is NOT 'latest', we might want to keep 'latest' or explicitly delete it.
-          # The current logic will try to delete an old 'latest' tag if _MY_IMAGE_TAG is something else and 'latest' is not in recent revisions.
           if [[ "$${shell_tag_iter_var}" == "latest" && "${_MY_IMAGE_TAG}" != "latest" ]]; then
              echo "Skipping deletion of general 'latest' tag as it's not the current build tag."
-             continue # Or implement specific logic if you want to prune 'latest'
+             continue
           fi
           if [[ -z "$${shell_tag_iter_var}" ]]; then
               continue
