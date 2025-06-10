@@ -219,3 +219,32 @@ graph TD
         ```
         将 `YOUR_CLOUD_RUN_SERVICE_URL` 替换为你的 Cloud Run 服务的实际 URL。
     *   检查 Cloud Run 服务的日志，以确保应用程序正常启动并运行，并且交易逻辑按预期执行。
+
+10. **出现禁止访问错误**
+    *   希望服务只能通过身份验证的客户端访问。这是一个更安全的做法。
+
+    为了实现这一点，您需要授予将用于访问 Cloud Run 服务的身份（例如，您的用户账号或一个服务账号）Cloud Run Invoker 角色。
+
+    以下授予 Cloud Run Invoker 角色：
+
+    *   如果您想使用当前登录的 Cloud Shell 用户账号来测试访问，请运行以下命令：
+        
+        ```bash
+        gcloud run services add-iam-policy-binding ib-paper \
+            --member="user:[YOUR_GCLOUD_EMAIL]" \
+            --role="roles/run.invoker" \
+            --region="asia-east1"
+        ```
+
+    将 [YOUR_GCLOUD_EMAIL] 替换为您的 Google Cloud 账号邮箱地址。
+
+
+    *   使用身份验证的 curl 请求测试：
+
+    *    一旦您授予了权限，您可以使用 gcloud auth print-identity-token 命令获取一个身份令牌，并将其包含在 curl 请求的 Authorization 头中。
+    *   运行以下命令来测试 summary 意图：
+
+        ```bash
+        TOKEN=$(gcloud auth print-identity-token)
+        curl -X GET -H "Authorization: Bearer ${TOKEN}" "https://ib-paper-599151217267.asia-east1.run.app/summary"
+        ```
