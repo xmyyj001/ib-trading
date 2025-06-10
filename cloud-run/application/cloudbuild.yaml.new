@@ -1,0 +1,206 @@
+# cloud-run/application/cloudbuild.yaml
+steps:
+# 1. 构建并推送 Docker 镜像 (如果尚不存在)
+# 这一步使用 `gcloud alpha` 来检查镜像是否存在，如果不存在则构建并推送。
+- name: "gcr.io/cloud-builders/docker"
+  entrypoint: "bash"
+  id: "Build and Push"
+  args:
+  - "-c"
+  - |
+    set -e # <<< BEST PRACTICE: Fail script on any error
+    TARGET_IMAGE="europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG}"
+    
+    # 使用 gcloud artifacts docker images describe 来检查镜像是否存在，这比 list 和 grep 更直接可靠
+    if gcloud artifacts docker images describe "$${TARGET_IMAGE}" --project="${PROJECT_ID}" >/dev/null 2>&1; then
+      echo "Image $${TARGET_IMAGE} already exists. Skipping build and push."
+    else
+      echo "Image $${TARGET_IMAGE} not found. Building and pushing..."
+      
+      # <<< ROBUSTNESS: 更改了构建命令以提高健壮性
+      # - 使用项目根目录 '.' 作为构建上下文，这样 Dockerfile 中的 `COPY app/ ./app` 等命令才能正确找到文件。
+      # - 使用 -f 明确指定 Dockerfile 的路径。
+      docker build \
+        --build-arg GCP_PROJECT_ID="${PROJECT_ID}" \
+        --build-arg AR_REPO_NAME="eu.gcr.io" \
+        --build-arg BASE_IMAGE_TAG=latest \
+        -t "$${TARGET_IMAGE}" \
+        -f cloud-run/application/Dockerfile . # <<< ROBUSTNESS: 上下文是 '.', Dockerfile 路径用 -f 指定
+      
+      docker push "$${TARGET_IMAGE}"
+      echo "Image $${TARGET_IMAGE} built and pushed."
+    fi
+
+# 2. 运行安全检查 (Safety Check)
+- name: "gcr.io/cloud-builders/docker"
+  id: "Safety Check"
+  args:
+  - "run"
+  - "--entrypoint"
+  - "bash"
+  - "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG}"
+  - "-c"
+  - "pip install safety && safety check --bare || true"
+
+# 3. 运行单元测试 (Unittests)
+- name: "gcr.io/cloud-builders/docker"
+  id: "Unit Tests"
+  args:
+  - "run"
+  - "--entrypoint"
+  - "python"
+  - "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG}"
+  - "-m"
+  - "unittest"
+  - "discover"
+  - "-p"
+  - "test_*.py"
+
+# 4. 运行集成测试 (Integration Tests)
+# 这一步依赖于 Cloud Build 服务账号拥有访问 BigQuery 和 Firestore 的权限
+- name: "gcr.io/cloud-builders/docker"
+  id: "Integration Tests"
+  args:
+  - "run"
+  - "--network"
+  - "cloudbuild"
+  - "--env"
+  - "PYTHONPATH=/home"
+  - "--env"
+  - "PROJECT_ID=${PROJECT_ID}"
+  - "--env"
+  - "K_REVISION=cloudbuild"
+  - "--env"
+  - "MOCK_TWS_VERSION=981"
+  - "--entrypoint"
+  - "bash"
+  - "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG}"
+  - "-c"
+  - "/usr/bin/Xvfb :0 -ac -screen 0 1024x768x16 +extension RANDR & export DISPLAY=:0 && python ./_tests/integration_tests.py"
+
+# 5. 部署新的修订版本 (Deploy New Revision)
+- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk' # <<< BEST PRACTICE: 使用功能更全的 cloud-sdk 镜像
+  id: "Deploy to Cloud Run"
+  entrypoint: 'gcloud'
+  args:
+  - "run"
+  - "deploy"
+  - "ib-${_TRADING_MODE}"
+  - "--image"
+  - "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG}"
+  - "--region"
+  - "${_GCP_REGION}"
+  - "--platform"
+  - "managed"
+  - "--service-account"
+  - "ib-trading@${PROJECT_ID}.iam.gserviceaccount.com"
+  - "--revision-suffix"
+  - "${_MY_IMAGE_TAG}"
+  # <<< CRITICAL FIX: 附加 Secrets! 这是让应用能获取凭证的关键。
+  - "--update-secrets=IB_USERNAME=ib-gateway-username:latest,IB_PASSWORD=ib-gateway-password:latest"
+  # <<< BEST PRACTICE: 更新环境变量，确保 PROJECT_ID 和 TRADING_MODE 正确设置
+  - "--update-env-vars=PROJECT_ID=${PROJECT_ID},TRADING_MODE=${_TRADING_MODE}"
+  - "--update-labels"
+  - "app=ib-trading,trading-mode=${_TRADING_MODE}"
+  # <<< BEST PRACTICE: 为常驻服务设置性能和可用性参数
+  - "--cpu=2"             # IB Gateway 需要较多 CPU 资源
+  - "--memory=2Gi"          # 和较多内存
+  - "--min-instances=1"     # 关键！保持至少一个实例运行，以维持与IB的连接，避免冷启动
+  - "--max-instances=1"     # 交易机器人通常只需一个实例
+  - "--timeout=3600"        # 将请求超时延长，防止长时间运行的任务中断
+  - "--cpu-boost"           # 在启动时提供 CPU 加速，帮助 IB Gateway 快速初始化
+  - "--no-allow-unauthenticated" # 关键！保护服务，防止未经授权的公共访问
+
+# 6. 删除旧的修订版本和镜像 (Delete Old Revisions & Images)
+# 注意: 您的脚本非常棒，但为了简化和利用GCP原生功能，未来可以考虑使用 `gcloud run services update --revision-history-limit` 和 Artifact Registry 的清理策略。
+# 目前，保留您功能强大的自定义脚本。
+- name: "gcr.io/google.com/cloudsdktool/cloud-sdk" # <<< BEST PRACTICE: 使用 gcloud-sdk
+  id: "Cleanup"
+  entrypoint: "bash"
+  args:
+  - "-c"
+  - |
+    set -e 
+    if [[ "${_KEEP}" -gt "0" ]]; then
+      echo "Cleaning up old revisions for service ib-${_TRADING_MODE} in region ${_GCP_REGION}, keeping last ${_KEEP} active revisions..."
+      # (您的清理脚本主体保持不变，它非常周密)
+      ALL_REVISIONS_ARR=($(gcloud run revisions list --service="ib-${_TRADING_MODE}" --platform="managed" --region="${_GCP_REGION}" --filter="metadata.labels.trading-mode=${_TRADING_MODE}" --sort-by="~metadata.creationTimestamp" --format="value(metadata.name)"))
+      echo "Found revisions: $${ALL_REVISIONS_ARR[@]}"
+      REVISIONS_TO_DELETE_ARR=()
+      if [ "$${#ALL_REVISIONS_ARR[@]}" -gt "${_KEEP}" ]; then
+        REVISIONS_TO_DELETE_ARR=($${ALL_REVISIONS_ARR[@]:$_KEEP})
+      fi
+      if [ "$${#REVISIONS_TO_DELETE_ARR[@]}" -gt 0 ]; then
+        echo "The following revisions will be deleted: $${REVISIONS_TO_DELETE_ARR[@]}"
+        for shell_revision_var in "$${REVISIONS_TO_DELETE_ARR[@]}"; do
+          echo "Deleting revision: $${shell_revision_var}"
+          gcloud run revisions delete "$${shell_revision_var}" --platform="managed" --region="${_GCP_REGION}" --quiet
+        done
+      else
+        echo "No old revisions to delete beyond the _KEEP=${_KEEP} limit."
+      fi
+
+      echo "Cleaning up unused Docker image tags..."
+      ACTIVE_REVISION_TAGS_ARR=()
+      for shell_rev_name_var in "$${ALL_REVISIONS_ARR[@]:0:$_KEEP}"; do
+        shell_img_url_var=$(gcloud run revisions describe "$${shell_rev_name_var}" --platform="managed" --region="${_GCP_REGION}" --format="value(spec.template.spec.containers[0].image)")
+        shell_tag_var=$(echo "$${shell_img_url_var}" | rev | cut -d: -f1 | rev)
+        if [[ -n "$${shell_tag_var}" && "$${shell_tag_var}" != "latest" ]]; then
+             ACTIVE_REVISION_TAGS_ARR+=("$${shell_tag_var}")
+        fi
+      done
+      if [[ ! " $${ACTIVE_REVISION_TAGS_ARR[@]} " =~ " ${_MY_IMAGE_TAG} " ]]; then
+        ACTIVE_REVISION_TAGS_ARR+=("${_MY_IMAGE_TAG}") 
+      fi
+      ACTIVE_REVISION_TAGS_UNIQUE_ARR=($(echo "$${ACTIVE_REVISION_TAGS_ARR[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
+      echo "Active or recent revision tags to keep: $${ACTIVE_REVISION_TAGS_UNIQUE_ARR[@]}"
+      ALL_IMAGE_TAGS_ARR=($(gcloud artifacts docker images list "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application" --format="value(tags)" --filter="tags:*"))
+      echo "All image tags in repository: $${ALL_IMAGE_TAGS_ARR[@]}"
+      for shell_tag_iter_var in $${ALL_IMAGE_TAGS_ARR[@]//,/ }; do
+        if [[ -z "$${shell_tag_iter_var}" || "$${shell_tag_iter_var}" == "latest" && "${_MY_IMAGE_TAG}" != "latest" ]]; then
+          continue
+        fi
+        SHELL_SHOULD_KEEP_BOOL=false 
+        for shell_keep_tag_var in $${ACTIVE_REVISION_TAGS_UNIQUE_ARR[@]}; do
+          if [[ "$${shell_tag_iter_var}" == "$${shell_keep_tag_var}" ]]; then
+            SHELL_SHOULD_KEEP_BOOL=true
+            break
+          fi
+        done
+        if ! $${SHELL_SHOULD_KEEP_BOOL}; then
+          echo "Deleting image tag: europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:$${shell_tag_iter_var}"
+          gcloud artifacts docker images delete "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:$${shell_tag_iter_var}" --delete-tags --quiet
+        fi
+      done
+    else
+      echo "Skipping cleanup of old revisions and image tags as _KEEP is not greater than 0."
+    fi
+
+substitutions:
+  _GCP_REGION: europe-west6
+  _TRADING_MODE: paper 
+  _KEEP: "3" 
+  _MY_IMAGE_TAG: "latest"
+
+timeout: "1800s" # 增加了超时时间以适应更复杂的清理步骤
+
+; 修改摘要和解释
+; 【关键修正】部署步骤 (Deploy to Cloud Run)
+; 添加 --update-secrets: 这是最重要的修改。我添加了 --update-secrets=IB_USERNAME=ib-gateway-username:latest,IB_PASSWORD=ib-gateway-password:latest。这会将在 Secret Manager 中定义的 secrets 安全地挂载为 Cloud Run 服务中的环境变量 IB_USERNAME 和 IB_PASSWORD。您的应用程序现在可以访问它们了。
+; 添加性能和可用性参数:
+; --min-instances=1: 极其重要。这能确保您的交易机器人始终有一个实例在运行，避免因流量为零而被缩减到 0，从而保持与 IB Gateway 的持久连接，并避免代价高昂的冷启动。
+; --cpu=2, --memory=2Gi: 根据您的项目分析，IB Gateway 是资源密集型的，为其分配足够的资源可确保稳定运行。
+; --cpu-boost: 在容器启动时提供额外的 CPU 性能，有助于 Java 应用（如 IB Gateway）更快地完成初始化。
+; 添加安全参数:
+; --no-allow-unauthenticated: 这是一个安全最佳实践，它会移除服务的公共 URL，要求所有调用都必须经过 IAM 身份验证。这可以防止任何人意外触发或探测您的交易机器人。
+; 【健壮性改进】构建步骤 (Build and Push)
+; 修正 Docker 构建上下文: 我将 docker build 命令修改为 docker build ... -f cloud-run/application/Dockerfile .。
+; -f cloud-run/application/Dockerfile: 明确指定 Dockerfile 的位置。
+; .: 将构建上下文设置为项目的根目录。这修复了一个潜在的严重问题：如果您的 Dockerfile 中有 COPY app /app 这样的指令，原来的构建上下文 cloud-run/application/ 会导致找不到 app 目录。使用根目录作为上下文可以确保所有文件路径都正确。
+; 改进镜像存在性检查: 使用 gcloud artifacts docker images describe 代替 list | grep。describe 如果找不到镜像会直接返回错误，这比解析列表文本更健壮、更高效。
+; 【最佳实践】统一构建器镜像
+; 为了保持一致性，我将部署和清理步骤中的构建器从 gcloud-slim 更新为 gcr.io/google.com/cloudsdktool/cloud-sdk。这是一个更完整的 gcloud SDK 镜像，可以避免因缺少某些组件（特别是 beta 或 alpha 命令）而可能出现的意外问题。
+; 【清理脚本】
+; 您的脚本写得非常好，逻辑严密，所以我保留了它。
+; 我仅做了一个微小的修正：在循环 ALL_IMAGE_TAGS_ARR 时，使用了 ${ALL_IMAGE_TAGS_ARR[@]//,/ } 来处理 gcloud 可能返回的逗号分隔列表，使其更健壮。
+; 未来建议: 当您希望简化维护时，可以研究 Artifact Registry 的清理策略 (用于自动删除旧镜像) 和 gcloud run services update --revision-history-limit=3 (用于自动管理修订版本数量)。这些是 GCP 的原生功能，可以替代您的自定义脚本。
