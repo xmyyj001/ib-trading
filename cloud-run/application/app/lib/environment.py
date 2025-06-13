@@ -27,6 +27,10 @@ class Environment:
             else:
                 secrets = self.get_secret(self.SECRET_RESOURCE.format(self._env['PROJECT_ID'], self._trading_mode))
 
+            if secrets is None:
+                self._logging.critical("Failed to load environment variables from secret manager. They were None.")
+                raise ValueError("Environment configuration could not be loaded.")
+
             config = {
                 **ibc_config,
                 'tradingMode': self._trading_mode,
