@@ -6,6 +6,7 @@ ENV TWS_INSTALL_LOG=/root/Jts/tws_install.log \
     ibcPath=/opt/ibc \
     javaPath=/opt/i4j_jres \
     twsPath=/root/Jts/ibgateway \
+    twsVersion= \
     twsSettingsPath=/root/Jts
 
 # install dependencies
@@ -25,6 +26,8 @@ RUN wget -q -O /tmp/ibgw.sh https://download2.interactivebrokers.com/installers/
   && chmod +x /tmp/ibgw.sh \
   && yes n | echo | /tmp/ibgw.sh > ${TWS_INSTALL_LOG} || true \
   && rm /tmp/ibgw.sh \
+  && export twsVersion=$(grep -oP 'IB Gateway \K\d{3}' ${TWS_INSTALL_LOG}) \
+  && export twsPath=${twsPath}/${twsVersion} \
   && echo "Listing contents of ${twsPath}:" \
   && ls -la ${twsPath} \
   && echo "Listing contents of ${twsPath}/jars:" \
