@@ -5,8 +5,7 @@ ENV TWS_INSTALL_LOG=/root/Jts/tws_install.log \
     ibcIni=/root/ibc/config.ini \
     ibcPath=/opt/ibc \
     javaPath=/opt/i4j_jres \
-    twsPath=/root/Jts/ibgateway \
-    twsVersion= \
+    twsPath=/root/Jts \
     twsSettingsPath=/root/Jts
 
 # install dependencies
@@ -25,13 +24,21 @@ RUN mkdir -p /tmp && mkdir -p ${ibcPath} && mkdir -p ${twsPath}
 RUN wget -q -O /tmp/ibgw.sh https://download2.interactivebrokers.com/installers/ibgateway/stable-standalone/ibgateway-stable-standalone-linux-x64.sh \
   && chmod +x /tmp/ibgw.sh \
   && yes n | echo | /tmp/ibgw.sh > ${TWS_INSTALL_LOG} || true \
-  && rm /tmp/ibgw.sh \
-  && export twsVersion=$(grep -oP 'IB Gateway \K\d{3}' ${TWS_INSTALL_LOG}) \
-  && export twsPath=${twsPath}/${twsVersion} \
-  && echo "Listing contents of ${twsPath}:" \
-  && ls -la ${twsPath} \
-  && echo "Listing contents of ${twsPath}/jars:" \
-  && ls -la ${twsPath}/jars
+  && rm /tmp/ibgw.sh
+
+# Extract TWS version and set twsPath and twsSettingsPath dynamically
+RUN export TWS_VERSION=$(grep -oP 'IB Gateway \K\d{3}' ${TWS_INSTALL_LOG}) \
+  && export TWS_INSTALL_DIR=/root/Jts/ibgateway/${TWS_VERSION} \
+  && echo "Listing contents of ${TWS_INSTALL_DIR}:" \
+  && ls -la ${TWS_INSTALL_DIR} \
+  && echo "Listing contents of ${TWS_INSTALL_DIR}/jars:" \
+  && ls -la ${TWS_INSTALL_DIR}/jars \
+  && echo "Setting ENV TWS_VERSION=${TWS_VERSION}" \
+  && echo "Setting ENV twsPath=${TWS_INSTALL_DIR}" \
+  && echo "Setting ENV twsSettingsPath=${TWS_INSTALL_DIR}" \
+  && echo "ENV TWS_VERSION=${TWS_VERSION}" >> /etc/profile \
+  && echo "ENV twsPath=${TWS_INSTALL_DIR}" >> /etc/profile \
+  && echo "ENV twsSettingsPath=${TWS_INSTALL_DIR}" >> /etc/profile
 
 # download IBC
 RUN wget -q -O /tmp/IBC.zip https://github.com/IbcAlpha/IBC/releases/download/3.12.0/IBCLinux-3.12.0.zip \
