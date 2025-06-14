@@ -80,7 +80,7 @@ steps:
   - "/usr/bin/Xvfb :0 -ac -screen 0 1024x768x16 +extension RANDR & export DISPLAY=:0 && python ./_tests/integration_tests.py"
 
 #### (❗新增) Initialize Firestore config documents
-- name: 'python:3.9-slim'  # Use a standard, public Python image
+- name: 'python:3.9-slim'  # 使用标准的、公开的Python镜像
   id: InitializeFirestore
   entrypoint: 'bash'
   args:
@@ -88,12 +88,11 @@ steps:
   - |
     set -e
     echo "Initializing Firestore configuration documents for project ${PROJECT_ID}..."
-    # Install dependencies
     pip install google-cloud-firestore
     
-    # Run the script directly from the workspace
-    # Ensure your script is in the 'scripts' directory at the project root
-    python lib/init_firestore.py "${PROJECT_ID}"
+    # --- 核心修正 ---
+    # 使用根据您的项目结构确定的正确相对路径
+    python cloud-run/application/app/lib/init_firestore.py "${PROJECT_ID}"
     
     echo "Firestore initialization complete."
 
