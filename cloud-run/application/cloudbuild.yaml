@@ -81,18 +81,18 @@ steps:
 
 #### (❗新增) Initialize Firestore config documents
 - name: "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG}"
-  id: InitializeFirestore # 给步骤一个ID，方便在日志中识别
+  id: InitializeFirestore
   entrypoint: "bash"
   args:
   - "-c"
   - |
     set -e
     echo "Initializing Firestore configuration documents for project ${PROJECT_ID}..."
-    pip install google-cloud-firestore
-    python cloud-run/application/app/lib/init_firestore.py [YOUR_PROJECT_ID]
+    pip install --upgrade google-cloud-firestore
+    
+    python lib/init_firestore.py "${PROJECT_ID}"
 
     echo "Firestore initialization complete."
-
 
 #### deploy new revision
 - name: 'gcr.io/cloud-builders/gcloud-slim'
