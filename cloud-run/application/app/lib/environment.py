@@ -39,10 +39,27 @@ class Environment:
             self._logging.debug({**config, 'password': 'xxx'})
 
             # query config
+            common_doc = self._db.document('config/common').get()
+            mode_doc = self._db.document(f'config/{self._trading_mode}').get()
+
+            if not common_doc.exists:
+                raise ValueError("Critical configuration document 'config/common' not found in Firestore.")
+            if not mode_doc.exists:
+                raise ValueError(f"Critical configuration document 'config/{self._trading_mode}' not found in Firestore.")
+
+            # Now it's safe to call .to_dict()
+            common_config = common_doc.to_dict()
+            mode_config = mode_doc.to_dict()
+
             self._config = {
-                **self._db.document('config/common').get().to_dict(),
-                **self._db.document(f'config/{self._trading_mode}').get().to_dict()
+                **common_config,
+                **mode_config
             }
+            # self._config = {
+            #     **self._db.document('config/common').get().to_dict(),
+            #     **self._db.document(f'config/{self._trading_mode}').get().to_dict()
+            # }
+
 
             # instantiate IB Gateway
             self._ibgw = IBGW(config)
