@@ -36,7 +36,7 @@ env = {
     key: environ.get(key) for key in
     ['ibcIni', 'ibcPath', 'javaPath', 'twsPath', 'twsSettingsPath']
 }
-env['javaPath'] += f"/{listdir(env['javaPath'])[0]}/bin"
+# env['javaPath'] += f"/{listdir(env['javaPath'])[0]}/bin"
 
 # --- 主要修改区域开始 ---
 

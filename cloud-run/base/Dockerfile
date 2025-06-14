@@ -1,32 +1,36 @@
 FROM python:3.9-slim
 
 # --- 1. 设置环境变量 ---
-# 我们仍然需要 TWS_VERSION 来配置 IBC。
-# 其他路径也预先定义好。
+# ！！！核心改变：我们不再依赖 IB Gateway 的 JRE，而是自己安装并硬编码 javaPath。
 ENV TWS_VERSION=981
-# ！！！核心改变：我们现在假设安装程序会直接在 /root/Jts 下创建文件。
-# 因此，twsPath 直接指向 /root/Jts。
 ENV twsPath=/root/Jts
 ENV twsSettingsPath=/root/Jts
 ENV TWS_INSTALL_LOG=/root/Jts/tws_install.log
 ENV ibcIni=/root/ibc/config.ini
 ENV ibcPath=/opt/ibc
-ENV javaPath=/opt/i4j_jres
+ENV javaPath=/usr/lib/jvm/java-17-openjdk-amd64/bin
 ENV DISPLAY=:0
 
 # --- 2. 简化的、健壮的安装步骤 ---
-# 将所有安装和验证逻辑合并到一个 RUN 指令中。
+# 将所有依赖安装合并，并加入了 openjdk-17-jre-headless
 RUN apt-get update && apt-get install --no-install-recommends -y \
-    wget unzip xvfb libxtst6 libxrender1 net-tools openjfx \
+    wget \
+    unzip \
+    xvfb \
+    libxtst6 \
+    libxrender1 \
+    net-tools \
+    openjfx \
+    openjdk-17-jre-headless \
   && apt-get clean && apt-get -y autoremove \
   # 创建目录
   && mkdir -p /tmp ${ibcPath} ${twsPath} \
-  # 下载并运行安装程序。我们告诉它安装到 /root/Jts。
+  # 下载并运行安装程序
   && wget -q -O /tmp/ibgw.sh https://download2.interactivebrokers.com/installers/ibgateway/stable-standalone/ibgateway-stable-standalone-linux-x64.sh \
   && chmod +x /tmp/ibgw.sh \
   && yes n | echo ${twsPath} | /tmp/ibgw.sh > ${TWS_INSTALL_LOG} || true \
   && rm /tmp/ibgw.sh \
-  # 关键验证：我们不再检查一个猜测的子目录，而是直接检查 twsPath 本身
+  # 验证 IB Gateway 安装
   && echo "Verifying content of installation directory: ${twsPath}" \
   && ls -l ${twsPath} \
   # 下载并安装 IBC
