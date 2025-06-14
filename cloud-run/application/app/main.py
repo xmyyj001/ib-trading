@@ -39,31 +39,47 @@ env = {
 env['javaPath'] += f"/{listdir(env['javaPath'])[0]}/bin"
 
 # --- 主要修改区域开始 ---
-# 从日志文件中安全地提取 TWS 版本号
 
-# 1. 首先读取日志文件内容
-with open(TWS_INSTALL_LOG, 'r') as fp:
-    install_log = fp.read()
+# 优先从环境变量获取 TWS 版本号，这是最可靠的方式
+tws_version = environ.get('TWS_VERSION')
 
-# 2. 执行正则表达式搜索，并将结果保存在一个变量中
-match = re.search('IB Gateway ([0-9]{3})', install_log)
+# 如果环境变量不存在，则尝试从日志文件中解析
+if not tws_version:
+    logging.warning("TWS_VERSION environment variable not set. Falling back to parsing log file.")
+    try:
+        # 确保 TWS_INSTALL_LOG 变量存在
+        if not TWS_INSTALL_LOG:
+             raise ValueError("TWS_VERSION and TWS_INSTALL_LOG environment variables are both not set.")
 
-# 3. 检查搜索是否成功。如果不成功，则抛出一个清晰的异常，而不是让程序崩溃
-if not match:
-    # 这个错误信息会非常清晰地告诉您问题所在，方便调试
-    raise ValueError(
-        f"无法在 TWS 安装日志中找到版本号。 "
-        f"期望的模式是 'IB Gateway ([0-9]{3})'。 "
-        f"日志文件 '{TWS_INSTALL_LOG}' 的内容是: '{install_log}'"
-    )
+        with open(TWS_INSTALL_LOG, 'r') as fp:
+            install_log = fp.read()
+        
+        match = re.search('IB Gateway ([0-9]{3})', install_log)
+        
+        if not match:
+            # 抛出一个包含所有调试信息的清晰错误
+            raise ValueError(
+                f"Could not find version pattern 'IB Gateway ([0-9]{3})' in log file '{TWS_INSTALL_LOG}'. "
+                f"Log content was: '{install_log}'"
+            )
+        
+        # 如果解析成功，则使用解析出的版本
+        tws_version = match.group(1)
+        logging.info(f"Extracted TWS version '{tws_version}' from log file: {TWS_INSTALL_LOG}")
 
-# 4. 只有在搜索成功后，才提取版本号
-tws_version = match.group(1)
+    except FileNotFoundError:
+        # 如果日志文件不存在，也抛出一个清晰的错误
+        raise FileNotFoundError(
+            f"TWS_INSTALL_LOG file not found at path: '{TWS_INSTALL_LOG}'"
+        )
+else:
+    logging.info(f"Using TWS version '{tws_version}' from environment variable.")
 
-# 5. 使用验证过的版本号来构建配置字典
+# 经过以上逻辑，tws_version 必须有值，否则程序已经因异常而停止
+# 现在可以安全地构建配置字典
 ibc_config = {
     'gateway': True,
-    'twsVersion': tws_version, # 使用安全获取到的版本号
+    'twsVersion': tws_version,
     **env
 }
 # --- 主要修改区域结束 ---

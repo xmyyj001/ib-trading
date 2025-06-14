@@ -70,7 +70,7 @@ steps:
   - "--env"
   - "K_REVISION=cloudbuild"
   - "--env"
-  - "MOCK_TWS_VERSION=981" # (❗试错后补充) 提供一个模拟的 TWS 版本号
+  - "TWS_VERSION=981" # (❗试错后补充) 模拟的 TWS 版本号变量名也保持一致
   # - "--env" # 如果不再需要从文件解析，可以注释或移除 TWS_INSTALL_LOG
   # - "TWS_INSTALL_LOG=/tmp/dummy_install.log" # 如果仍要使用，确保此文件在容器内可访问
   - "--entrypoint"
@@ -119,7 +119,9 @@ steps:
   - "--update-labels"
   - "app=ib-trading,trading-mode=${_TRADING_MODE}"
   - "--update-env-vars"
-  - "PROJECT_ID=${PROJECT_ID},TRADING_MODE=${_TRADING_MODE}"
+  # Add TWS_VERSION here
+  - "PROJECT_ID=${PROJECT_ID},TRADING_MODE=${_TRADING_MODE},TWS_VERSION=981"
+
 
 #### delete old revision(s)
 - name: "gcr.io/cloud-builders/gcloud-slim"
