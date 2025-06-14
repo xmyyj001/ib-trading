@@ -5,7 +5,7 @@ ENV TWS_INSTALL_LOG=/root/Jts/tws_install.log \
     ibcIni=/root/ibc/config.ini \
     ibcPath=/opt/ibc \
     javaPath=/opt/i4j_jres \
-    twsPath=/root/Jts \
+    twsPath=/root/Jts/ibgateway \
     twsSettingsPath=/root/Jts
 
 # install dependencies
