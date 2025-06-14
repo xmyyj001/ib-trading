@@ -24,7 +24,11 @@ RUN mkdir -p /tmp && mkdir -p ${ibcPath} && mkdir -p ${twsPath}
 RUN wget -q -O /tmp/ibgw.sh https://download2.interactivebrokers.com/installers/ibgateway/stable-standalone/ibgateway-stable-standalone-linux-x64.sh \
   && chmod +x /tmp/ibgw.sh \
   && yes n | echo | /tmp/ibgw.sh > ${TWS_INSTALL_LOG} || true \
-  && rm /tmp/ibgw.sh
+  && rm /tmp/ibgw.sh \
+  && echo "Listing contents of ${twsPath}:" \
+  && ls -la ${twsPath} \
+  && echo "Listing contents of ${twsPath}/jars:" \
+  && ls -la ${twsPath}/jars
 
 # download IBC
 RUN wget -q -O /tmp/IBC.zip https://github.com/IbcAlpha/IBC/releases/download/3.12.0/IBCLinux-3.12.0.zip \
