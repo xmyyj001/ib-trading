@@ -1,4 +1,4 @@
-from ib_insync import IB, IBC
+from ib_insync import IB, IBC, util
 
 from lib.gcp import logger as logging
 
@@ -11,6 +11,13 @@ class IBGW(IB):
 
     def __init__(self, ibc_config, ib_config=None, connection_timeout=120, timeout_sleep=5):
         super().__init__()
+        # --- CORE FIX ---
+        # This is the magic line. It patches asyncio to automatically
+        # create event loops in new threads, which is exactly what gunicorn does.
+        # This must be one of the first things to run.
+        util.patchAsyncio()
+        # --- END OF CORE FIX ---
+
         ib_config = ib_config or {}
         self.ibc_config = ibc_config
         self.ib_config = {**self.IB_CONFIG, **ib_config}
@@ -137,7 +144,18 @@ class IBGW(IB):
         """
 
         logging.info('Disconnecting from IB gateway...')
-        self.disconnect()
+        if self.isConnected():
+            self.disconnect()
+        
         logging.info('Terminating IBC...')
-        self.ibc.terminate()
-        self.sleep(wait)
+        # --- CORE FIX 2 ---
+        # .terminate() returns an awaitable coroutine. We must run it.
+        # util.run() will handle the event loop for this single async task.
+        try:
+            util.run(self.ibc.terminateAsync())
+        except Exception as e:
+            logging.error(f"Error during IBC termination: {e}")
+        # --- END OF CORE FIX 2 ---
+
+        if wait > 0:
+            self.sleep(wait) # self.sleep is synchronous and fine here.
