@@ -1,4 +1,4 @@
-# --- START OF FINAL, CORRECTED DOCKERFILE ---
+# --- START OF DEBUGGING DOCKERFILE ---
 
 FROM python:3.9-slim
 
@@ -13,33 +13,29 @@ ENV ibcPath=/opt/ibc
 ENV javaPath=/usr/lib/jvm/java-17-openjdk-amd64/bin
 ENV DISPLAY=:0
 
-# --- 2. 修正后的、正确的安装步骤 ---
-# (这是唯一需要修改的部分)
+# --- 2. 修正后的、正确的安装步骤 (带调试) ---
 RUN apt-get update && \
-    # 添加 DEBIAN_FRONTEND=noninteractive 以避免在非交互式环境中出现问题
     export DEBIAN_FRONTEND=noninteractive && \
     apt-get install --no-install-recommends -y \
     wget unzip xvfb libxtst6 libxrender1 net-tools openjfx openjdk-17-jre-headless \
-    # 清理 apt 缓存以减小镜像体积
   && apt-get clean && rm -rf /var/lib/apt/lists/* \
-    # 创建我们的目标目录
   && mkdir -p /tmp ${ibcPath} ${twsPath} \
-    # 下载 IB Gateway 安装脚本
   && wget -q -O /tmp/ibgw.sh https://download2.interactivebrokers.com/installers/ibgateway/stable-standalone/ibgateway-stable-standalone-linux-x64.sh \
   && chmod +x /tmp/ibgw.sh \
-    #
-    # --- 核心修正 ---
-    # 我们的日志已经证明 unzip 不可用。
-    # 我们必须执行安装脚本，并使用 -q (quiet) 和 -dir (directory) 参数
-    # 来进行无人值守安装。这是处理 install4j 程序的标准方式。
   && /tmp/ibgw.sh -q -dir ${twsPath} \
-    #
-    # 清理安装脚本
   && rm /tmp/ibgw.sh \
-    # 关键验证：这个验证步骤现在将检查 -dir 参数是否生效
+    #
+    # --- 核心调试步骤 ---
+    # 我们在这里列出安装目录的全部内容，以便查看 jts.jar 到底被放在了哪里。
+    # "ls -laR" 会递归地列出所有文件和目录。
+  && echo "--- DEBUG: Listing contents of ${twsPath} ---" \
+  && ls -laR ${twsPath} \
+  && echo "--- END DEBUG ---" \
+    #
+    # 关键验证 (我们暂时让它继续运行，以便看到上面的调试输出)
   && echo "Verifying that 'jts.jar' was extracted to ${twsPath}..." \
   && find ${twsPath} -name "jts.jar" -print -quit | grep -q . \
-    # 下载并安装 IBC (此部分保持不变)
+    # 下载并安装 IBC
   && wget -q -O /tmp/IBC.zip https://github.com/IbcAlpha/IBC/releases/download/3.12.0/IBCLinux-3.12.0.zip \
   && unzip /tmp/IBC.zip -d ${ibcPath} \
   && chmod +x ${ibcPath}/*.sh ${ibcPath}/*/*.sh \
@@ -48,7 +44,6 @@ RUN apt-get update && \
 # --- 3. 复制配置文件和脚本 ---
 # (此部分保持不变)
 COPY ibc/config.ini ${ibcIni}
-# 将 jts.ini 复制到我们的安装根目录
 COPY ibc/jts.ini ${twsPath}/jts.ini
 
 WORKDIR /home
@@ -59,4 +54,4 @@ RUN chmod +x cmd.sh
 # (此部分保持不变)
 CMD tail -f /dev/null
 
-# --- END OF FINAL, CORRECTED DOCKERFILE ---
+# --- END OF DEBUGGING DOCKERFILE ---
