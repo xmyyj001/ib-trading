@@ -2,12 +2,14 @@ from ib_insync import IB, IBC
 
 from lib.gcp import logger as logging
 
+import socket
+import time
 
 class IBGW(IB):
 
     IB_CONFIG = {'host': '127.0.0.1', 'port': 4001, 'clientId': 1}
 
-    def __init__(self, ibc_config, ib_config=None, connection_timeout=60, timeout_sleep=5):
+    def __init__(self, ibc_config, ib_config=None, connection_timeout=120, timeout_sleep=5):
         super().__init__()
         ib_config = ib_config or {}
         self.ibc_config = ibc_config
@@ -51,29 +53,78 @@ class IBGW(IB):
     #         raise e
 # In lib/ibgw.py
 
+    # def start_and_connect(self):
+    #     """
+    #     Starts the IB gateway with IBC in the background and connects to it.
+    #     """
+    #     if self.isConnected():
+    #         logging.info('Already connected to IB gateway.')
+    #         return
+
+    #     logging.info('Starting IBC process in the background...')
+    #     # ！！！核心改变：让 IBC 在后台启动，不阻塞 ！！！
+    #     # IBC 类的 start 方法本身就是非阻塞的，它会启动一个子进程。
+    #     # 我们只需要调用它，然后继续即可。
+    #     self.ibc.start()
+
+    #     logging.info('Attempting to connect to IB gateway...')
+    #     # ib_insync 的 connect 方法会自己处理重试和等待。
+    #     # 我们将连接超时完全交给它。
+    #     try:
+    #         self.connect(**self.ib_config, timeout=self.connection_timeout)
+    #         logging.info('Successfully connected to IB gateway.')
+    #     except Exception as e:
+    #         logging.error(f"Failed to connect to IB gateway within {self.connection_timeout}s: {e}")
+    #         # 即使连接失败，也要尝试终止 IBC 进程，避免留下僵尸进程
+    #         self.ibc.terminate()
+    #         raise e
+
     def start_and_connect(self):
         """
-        Starts the IB gateway with IBC in the background and connects to it.
+        Starts IBC, waits for the API port to open, and then connects.
         """
         if self.isConnected():
             logging.info('Already connected to IB gateway.')
             return
 
         logging.info('Starting IBC process in the background...')
-        # ！！！核心改变：让 IBC 在后台启动，不阻塞 ！！！
-        # IBC 类的 start 方法本身就是非阻塞的，它会启动一个子进程。
-        # 我们只需要调用它，然后继续即可。
         self.ibc.start()
 
-        logging.info('Attempting to connect to IB gateway...')
-        # ib_insync 的 connect 方法会自己处理重试和等待。
-        # 我们将连接超时完全交给它。
+        # --- New Health Check Loop ---
+        host = self.ib_config.get('host', '127.0.0.1')
+        port = self.ib_config.get('port', 4001)
+        
+        logging.info(f"Probing for API port {host}:{port} to open...")
+        start_time = time.time()
+        port_is_open = False
+        
+        while time.time() - start_time < self.connection_timeout:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(1) # Set a short timeout for each individual check
+                try:
+                    s.connect((host, port))
+                    port_is_open = True
+                    logging.info(f"Success! API port {port} is now open.")
+                    break
+                except (socket.timeout, ConnectionRefusedError):
+                    logging.info(f"Port not open yet. Waiting... (elapsed: {int(time.time() - start_time)}s)")
+                    time.sleep(self.timeout_sleep) # Use your timeout_sleep (e.g., 5 seconds)
+        
+        if not port_is_open:
+            error_msg = f"Health check failed: API port {port} did not open within {self.connection_timeout}s."
+            logging.error(error_msg)
+            self.ibc.terminate()
+            raise TimeoutError(error_msg)
+        # --- End of Health Check Loop ---
+
+        logging.info('Port is open, proceeding with ib_insync connection...')
         try:
-            self.connect(**self.ib_config, timeout=self.connection_timeout)
+            # Now connect. This should be very fast since we know the port is open.
+            # We still use a timeout as a fallback.
+            self.connect(**self.ib_config, timeout=30)
             logging.info('Successfully connected to IB gateway.')
         except Exception as e:
-            logging.error(f"Failed to connect to IB gateway within {self.connection_timeout}s: {e}")
-            # 即使连接失败，也要尝试终止 IBC 进程，避免留下僵尸进程
+            logging.error(f"Connection failed even after port was open: {e}")
             self.ibc.terminate()
             raise e
         

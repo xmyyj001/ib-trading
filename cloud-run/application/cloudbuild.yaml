@@ -112,6 +112,8 @@ steps:
   - "1"
   - "--memory"
   - "2Gi"
+  - "--timeout"
+  - "180s"  # <-- 关键: 设置服务超时为3分钟 (180秒)
   - "--service-account"
   - "ib-trading@${PROJECT_ID}.iam.gserviceaccount.com"
   - "--revision-suffix"
