@@ -41,7 +41,7 @@ steps:
       echo "Image $${TARGET_IMAGE} already exists. Skipping build and push."
     fi
 
-#### [FIX] Unified Test Step
+#### [FIX] Unified Test Step with Correct Paths (Alternative)
 - name: "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG}"
   id: RunAllTests
   entrypoint: 'bash'
@@ -51,26 +51,24 @@ steps:
     set -e
     echo "--- Running ALL tests (unit and integration) in a unified environment ---"
     
-    # The image already has all dependencies installed.
-    # Set PYTHONPATH to allow imports from the root of the app code.
+    # The WORKDIR in the application Dockerfile is /home. All code is there.
+    # We will set PYTHONPATH and tell unittest where to start discovering.
     export PYTHONPATH=/home
 
     # Run unittests first
     echo "--- Running Unit Tests ---"
-    python -m unittest discover -v -p "test_*.py"
+    python -m unittest discover -v -s /home -p "test_*.py"
     
     # Run integration tests second
-    # We still need Xvfb for the gateway to run inside the test
     echo "--- Running Integration Tests ---"
     /usr/bin/Xvfb :0 -ac -screen 0 1024x768x16 +extension RANDR &
     export DISPLAY=:0
     
-    # Pass necessary env vars for integration tests
     export PROJECT_ID=${PROJECT_ID}
     export K_REVISION=cloudbuild
     export TWS_VERSION=1030
     
-    python ./_tests/integration_tests.py
+    python /home/_tests/integration_tests.py
 
 #### Initialize Firestore config documents
 - name: 'python:3.9-slim'
