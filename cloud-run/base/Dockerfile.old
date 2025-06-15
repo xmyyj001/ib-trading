@@ -12,18 +12,28 @@ ENV javaPath=/usr/lib/jvm/java-17-openjdk-amd64/bin
 ENV DISPLAY=:0
 
 # --- 2. 简化的、健壮的安装步骤 ---
+# 将所有依赖安装合并，并加入了 openjdk-17-jre-headless
 RUN apt-get update && apt-get install --no-install-recommends -y \
-    wget unzip xvfb libxtst6 libxrender1 net-tools openjfx openjdk-17-jre-headless \
+    wget \
+    unzip \
+    xvfb \
+    libxtst6 \
+    libxrender1 \
+    net-tools \
+    openjfx \
+    openjdk-17-jre-headless \
   && apt-get clean && apt-get -y autoremove \
+  # 创建目录
   && mkdir -p /tmp ${ibcPath} ${twsPath} \
+  # 下载并运行安装程序
   && wget -q -O /tmp/ibgw.sh https://download2.interactivebrokers.com/installers/ibgateway/stable-standalone/ibgateway-stable-standalone-linux-x64.sh \
   && chmod +x /tmp/ibgw.sh \
   && yes n | echo ${twsPath} | /tmp/ibgw.sh > ${TWS_INSTALL_LOG} || true \
   && rm /tmp/ibgw.sh \
-  # --- 增加的终极调试命令 ---
-  && echo ">>> DEBUG: Finding jts.jar to determine the real installation path..." \
-  && find /root -name "jts.jar" \
-  # --- 调试命令结束 ---
+  # 验证 IB Gateway 安装
+  && echo "Verifying content of installation directory: ${twsPath}" \
+  && ls -l ${twsPath} \
+  # 下载并安装 IBC
   && wget -q -O /tmp/IBC.zip https://github.com/IbcAlpha/IBC/releases/download/3.12.0/IBCLinux-3.12.0.zip \
   && unzip /tmp/IBC.zip -d ${ibcPath} \
   && chmod +x ${ibcPath}/*.sh ${ibcPath}/*/*.sh \
