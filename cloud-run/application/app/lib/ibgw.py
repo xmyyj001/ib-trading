@@ -1,4 +1,4 @@
-# --- START OF FINAL, CORRECT lib/ibgw.py ---
+# --- START OF FULLY REVISED lib/ibgw.py ---
 
 from ib_insync import IB, IBC, util
 
@@ -22,21 +22,24 @@ class IBGW(IB):
 
         self.ibc_config = ibc_config
         
-        # Explicitly build the command to avoid any ambiguity
-        ibc_path = self.ibc_config.get('ibcPath', '/opt/ibc')
-        tws_path = self.ibc_config.get('twsPath', '/root/ibgateway')
-        ini_file = self.ibc_config.get('ibcIni', '/root/ibc/config.ini')
-        tws_version = self.ibc_config.get('twsVersion') # Get the version from config
-
-        # The IBC script for newer versions does not require the version as an argument
-        # It reads it from the installation itself. We provide paths and gateway flag.
-        explicit_script_command = (
-            f"{ibc_path}/scripts/ibcstart.sh -g " # Note: version number removed, it's often not needed for newer scripts
-            f"--tws-path={tws_path} --ibc-ini={ini_file}"
-        )
-        
-        logging.info(f"Using explicit IBC command: {explicit_script_command}")
-        self.ibc_config['script'] = explicit_script_command
+        # --- THE FINAL FIX (Option 2) ---
+        # This makes the __init__ method robust.
+        # It only builds the explicit command if the 'script' key is not already
+        # provided (e.g., by a test fixture that passes an empty config).
+        if 'script' not in self.ibc_config:
+            # Explicitly build the command to avoid any ambiguity
+            ibc_path = self.ibc_config.get('ibcPath', '/opt/ibc')
+            tws_path = self.ibc_config.get('twsPath', '/root/ibgateway')
+            ini_file = self.ibc_config.get('ibcIni', '/root/ibc/config.ini')
+            
+            explicit_script_command = (
+                f"{ibc_path}/scripts/ibcstart.sh -g "
+                f"--tws-path={tws_path} --ibc-ini={ini_file}"
+            )
+            
+            logging.info(f"Using explicit IBC command: {explicit_script_command}")
+            self.ibc_config['script'] = explicit_script_command
+        # --- END OF FINAL FIX ---
 
         self.ibc = IBC(**self.ibc_config)
 
@@ -97,4 +100,4 @@ class IBGW(IB):
         if wait > 0:
             time.sleep(wait)
 
-# --- END OF FINAL, CORRECT lib/ibgw.py ---
+# --- END OF FULLY REVISED lib/ibgw.py ---
