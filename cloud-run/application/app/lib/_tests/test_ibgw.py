@@ -1,10 +1,11 @@
-# --- START OF FILE test_ibgw.py ---
+# --- START OF REVISED test_ibgw.py ---
 
 import unittest
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 # 确保导入了我们将要模拟的库
 import socket
+import time  # <--- [FIX] Import the time module
 
 from lib.ibgw import IBGW
 
@@ -40,17 +41,15 @@ class TestIbgw(unittest.TestCase):
         patcher.return_value = mock_socket_context_manager
         return mock_socket_instance
 
+    # --- [FIX] Patched time.sleep and added it as an argument ---
+    @patch('lib.ibgw.time.sleep')
     @patch('lib.ibgw.socket.socket')
-    def test_start_and_connect_success_after_retries(self, mock_socket):
+    def test_start_and_connect_success_after_retries(self, mock_socket, mock_time_sleep):
         """
         场景1: 端口在几次尝试后成功打开，然后成功连接。
         """
         # --- MOCK 设置 ---
-        # 模拟尚未连接
         self.test_obj.isConnected.return_value = False
-        
-        # 模拟 socket.connect() 的行为：前两次失败，第三次成功
-        # 'None' 代表成功调用，没有抛出异常
         mock_connect = self._setup_socket_mock(mock_socket, [
             ConnectionRefusedError, 
             socket.timeout, 
@@ -61,40 +60,32 @@ class TestIbgw(unittest.TestCase):
         self.test_obj.start_and_connect()
 
         # --- 断言 ---
-        # 验证 IBC 启动了
         self.test_obj.ibc.start.assert_called_once()
-        # 验证 socket.connect 被调用了3次
         self.assertEqual(mock_connect.call_count, 3)
-        # 验证 sleep 被调用了2次 (在前两次失败后)
-        self.assertEqual(self.test_obj.sleep.call_count, 2)
-        # 验证最终的 ib_insync.connect 被调用
+        # [FIX] Assert against the correctly mocked time.sleep
+        self.assertEqual(mock_time_sleep.call_count, 2)
         self.test_obj.connect.assert_called_once_with(**self.test_obj.ib_config, timeout=30)
-        # 验证 IBC.terminate 没有被调用
         self.test_obj.ibc.terminate.assert_not_called()
 
+    # --- [FIX] Patched time.sleep and added it as an argument ---
+    @patch('lib.ibgw.time.sleep')
     @patch('lib.ibgw.socket.socket')
-    def test_start_and_connect_timeout_failure(self, mock_socket):
+    def test_start_and_connect_timeout_failure(self, mock_socket, mock_time_sleep):
         """
         场景2: 端口在超时时间内一直未能打开。
         """
         # --- MOCK 设置 ---
-        # 模拟尚未连接
         self.test_obj.isConnected.return_value = False
-        # 模拟 socket.connect() 总是失败
-        mock_connect = self._setup_socket_mock(mock_socket, ConnectionRefusedError).connect
+        self._setup_socket_mock(mock_socket, ConnectionRefusedError)
 
         # --- 执行 & 断言 ---
-        # 验证代码是否按预期抛出了 TimeoutError
         with self.assertRaises(TimeoutError):
             self.test_obj.start_and_connect()
 
-        # 验证 IBC 启动了
         self.test_obj.ibc.start.assert_called_once()
-        # 验证 sleep 被调用了多次 (具体次数取决于超时设置)
-        self.assertGreater(self.test_obj.sleep.call_count, 1)
-        # 验证 ib_insync.connect 从未被调用
+        # [FIX] Assert against the correctly mocked time.sleep
+        self.assertGreater(mock_time_sleep.call_count, 1)
         self.test_obj.connect.assert_not_called()
-        # 验证 IBC.terminate 被调用了，以清理资源
         self.test_obj.ibc.terminate.assert_called_once()
 
 
@@ -104,14 +95,12 @@ class TestIbgw(unittest.TestCase):
         场景3: 调用方法时已经处于连接状态。
         """
         # --- MOCK 设置 ---
-        # 模拟已经连接
         self.test_obj.isConnected.return_value = True
 
         # --- 执行 ---
         self.test_obj.start_and_connect()
 
         # --- 断言 ---
-        # 验证没有执行任何启动或连接操作
         self.test_obj.ibc.start.assert_not_called()
         mock_socket.assert_not_called()
         self.test_obj.connect.assert_not_called()
@@ -129,4 +118,4 @@ class TestIbgw(unittest.TestCase):
 if __name__ == '__main__':
     unittest.main()
 
-# --- END OF FILE test_ibgw.py ---
+# --- END OF REVISED test_ibgw.py ---
