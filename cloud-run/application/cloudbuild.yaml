@@ -1,4 +1,18 @@
 steps:
+
+# --- NEW DEBUGGING STEP ---
+- name: 'gcr.io/cloud-builders/gcloud-slim'
+  id: 'Verify Source Code'
+  entrypoint: 'bash'
+  args:
+  - '-c'
+  - |
+    echo "--- Verifying contents of requirements.txt on the build server ---"
+    cat cloud-run/application/app/requirements.txt
+    echo "----------------------------------------------------------------"
+
+# --- EXISTING STEP (build and push Docker image) ---
+
 #### build and push Docker image if not existing yet
 - name: "google/cloud-sdk:slim"
   entrypoint: "bash"
