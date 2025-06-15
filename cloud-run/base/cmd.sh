@@ -2,6 +2,12 @@
 # 开启错误立即退出
 set -e
 
+# --- CORE FIX ---
+# Export the TWS_PATH so that the IBC shell scripts can find the installation.
+# This must match the installation directory from your Dockerfile.
+export TWS_PATH=/root/ibgateway
+# --- END OF CORE FIX ---
+
 echo "Starting Xvfb (virtual display)..."
 # 将 Xvfb 放到后台运行
 Xvfb :0 -ac -screen 0 1024x768x16 +extension RANDR &
