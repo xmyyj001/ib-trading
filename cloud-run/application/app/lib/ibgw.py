@@ -17,38 +17,66 @@ class IBGW(IB):
 
         self.ibc = IBC(**self.ibc_config)
 
+    # def start_and_connect(self):
+    #     """
+    #     Starts the IB gateway with IBC and connects to it.
+    #     """
+
+    #     logging.info('Starting IBC...')
+    #     self.ibc.start()
+    #     wait = self.connection_timeout
+
+    #     try:
+    #         while not self.isConnected():
+    #             # retry until connection is established or timeout is reached
+    #             self.sleep(self.timeout_sleep)
+    #             wait -= self.timeout_sleep
+    #             logging.info('Connecting to IB gateway...')
+    #             try:
+    #                 self.connect(**self.ib_config)
+    #             except ConnectionRefusedError:
+    #                 if wait <= 0:
+    #                     logging.warning('Timeout reached')
+    #                     raise TimeoutError('Could not connect to IB gateway')
+    #         logging.info('Connected.')
+    #     except Exception as e:
+    #         logging.error(f'{e.__class__.__name__}: {e}')
+    #         # write the launch log to logging (of limited use though as only the first
+    #         # phase of the gateway startup process is logged in this non-encrypted log)
+    #         try:
+    #             with open(f"{self.ibc_config['twsPath']}/launcher.log", 'r') as fp:
+    #                 logging.info(fp.read())
+    #         except FileNotFoundError:
+    #             logging.warning(f"{self.ibc_config['twsPath']}/launcher.log not found")
+    #         raise e
+# In lib/ibgw.py
+
     def start_and_connect(self):
         """
-        Starts the IB gateway with IBC and connects to it.
+        Starts the IB gateway with IBC in the background and connects to it.
         """
+        if self.isConnected():
+            logging.info('Already connected to IB gateway.')
+            return
 
-        logging.info('Starting IBC...')
+        logging.info('Starting IBC process in the background...')
+        # ！！！核心改变：让 IBC 在后台启动，不阻塞 ！！！
+        # IBC 类的 start 方法本身就是非阻塞的，它会启动一个子进程。
+        # 我们只需要调用它，然后继续即可。
         self.ibc.start()
-        wait = self.connection_timeout
 
+        logging.info('Attempting to connect to IB gateway...')
+        # ib_insync 的 connect 方法会自己处理重试和等待。
+        # 我们将连接超时完全交给它。
         try:
-            while not self.isConnected():
-                # retry until connection is established or timeout is reached
-                self.sleep(self.timeout_sleep)
-                wait -= self.timeout_sleep
-                logging.info('Connecting to IB gateway...')
-                try:
-                    self.connect(**self.ib_config)
-                except ConnectionRefusedError:
-                    if wait <= 0:
-                        logging.warning('Timeout reached')
-                        raise TimeoutError('Could not connect to IB gateway')
-            logging.info('Connected.')
+            self.connect(**self.ib_config, timeout=self.connection_timeout)
+            logging.info('Successfully connected to IB gateway.')
         except Exception as e:
-            logging.error(f'{e.__class__.__name__}: {e}')
-            # write the launch log to logging (of limited use though as only the first
-            # phase of the gateway startup process is logged in this non-encrypted log)
-            try:
-                with open(f"{self.ibc_config['twsPath']}/launcher.log", 'r') as fp:
-                    logging.info(fp.read())
-            except FileNotFoundError:
-                logging.warning(f"{self.ibc_config['twsPath']}/launcher.log not found")
+            logging.error(f"Failed to connect to IB gateway within {self.connection_timeout}s: {e}")
+            # 即使连接失败，也要尝试终止 IBC 进程，避免留下僵尸进程
+            self.ibc.terminate()
             raise e
+        
 
     def stop_and_terminate(self, wait=0):
         """

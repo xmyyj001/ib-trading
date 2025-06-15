@@ -201,6 +201,13 @@ GIT_TAG=$(git rev-parse --short HEAD)
 gcloud builds submit --config cloud-run/application/cloudbuild.yaml \
   --substitutions=_TRADING_MODE=paper,_GCP_REGION=asia-east1,_MY_IMAGE_TAG=${GIT_TAG:-manual-latest} .
 
+
+#   使用身份验证的 curl 请求测试：
+        ```bash
+        TOKEN=$(gcloud auth print-identity-token)
+        curl -X GET -H "Authorization: Bearer ${TOKEN}" "https://ib-paper-599151217267.asia-east1.run.app/summary"
+        ```
+
 # 3.如果出现运行结果错误，可以读取日志，以查错
 gcloud run services logs read ib-paper --region asia-east1 --limit 100
 ```
