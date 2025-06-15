@@ -1,0 +1,144 @@
+好的，我们又一次成功地推进了问题！这次的日志组合告诉了我们一个非常精确的故事。
+
+**首先，让我们看好的方面：**
+
+1.  **`docker build` 成功**: `[+] Building 59.8s (12/12) FINISHED`。这说明您使用 `unzip` 方法的**新 `Dockerfile` 是完全正确的**。它成功地绕过了不可靠的安装程序，解压了文件，并通过了验证。您的基础镜像 `...:latest` 现在是正确的。
+2.  **Cloud Build 部署成功**: `STATUS: SUCCESS`。您的 CI/CD 流程跑通了，它使用了新的基础镜像，构建了应用镜像，并成功部署了一个新的 Cloud Run 修订版 `ib-paper-c743b01`。
+3.  **`FileNotFoundError` 已消失**: 在最新的 Cloud Run 日志中，我们**再也看不到**关于 `/opt/i4j_jres` 的 `FileNotFoundError` 了。这证明您对 `main.py` 的修改是成功的，并且新的 `base` 镜像提供了正确的 `javaPath`。
+
+**现在，我们来分析新的、也是最后的核心问题。**
+
+### 核心问题分析：`WORKER TIMEOUT`
+
+您的 Cloud Run 日志中出现了一个全新的、非常关键的错误：
+
+```
+2025-06-15 01:45:36 [2025-06-15 01:45:36 +0000] [3] [CRITICAL] WORKER TIMEOUT (pid:6)
+2025-06-15 01:45:36 [2025-06-15 01:45:36 +0000] [6] [INFO] Worker exiting (pid: 6)
+2025-06-15 01:45:42 [2025-06-15 01:45:42 +0000] [3] [WARNING] Worker with pid 6 was terminated due to signal 9
+```
+
+**这是什么意思？**
+
+*   `Gunicorn`（您的 Python web 服务器）启动了一个 "worker" 进程来处理请求。
+*   这个 worker 进程在默认的超时时间（通常是 30 秒）内没有向主进程“报到”或响应。
+*   主进程认为这个 worker 已经“卡死”了，于是发送了一个 `SIGKILL` 信号 (signal 9) 强制杀掉了它。
+*   然后，当您的 `curl` 请求到达时，没有健康的 worker 来处理它，最终导致了 `TimeoutError: Could not connect to IB gateway`。
+
+**为什么 Worker 会超时？**
+
+当您的 `falcon` 应用被 `gunicorn` 加载时，它会执行 `main.py` 顶层的代码，包括这一行：
+`Environment(TRADING_MODE, ibc_config)`
+
+在 `Environment` 类的 `__init__` 方法中，您调用了 `self._ibgw = IBGW(config)`，然后（在您的 `ibgw.py` 中）有一个 `start_and_connect()` 方法，这个方法会**阻塞**（等待），直到它成功连接到 IB Gateway 或者超时。
+
+**问题就在这里**：IB Gateway 的启动是一个**非常耗时**的过程。它需要加载大量的 Java 类，进行初始化，可能还需要进行一次性的配置。在资源受限的 Cloud Run 环境中，这个过程可能需要**远远超过 Gunicorn 默认的 30 秒超时时间**。
+
+因此，您的应用程序在启动时就“卡”在了等待 IB Gateway 启动的环节，Gunicorn 失去了耐心，杀掉了它，导致了整个服务的失败。
+
+### 最终的解决方案：分离启动过程
+
+我们必须将**耗时的 IB Gateway 启动过程**与**快速响应的 Web 服务器启动过程**分离开来。
+
+我们将使用一个启动脚本 (`cmd.sh`) 来实现这一点：
+1.  在**后台**启动 IB Gateway 进程。
+2.  **立即**启动 `gunicorn` Web 服务器，让它可以快速响应 Cloud Run 的健康检查。
+3.  当一个 API 请求进来时，`ib_insync` 会发现 Gateway 已经在后台运行，并直接连接上去。
+
+---
+
+### 您的最终行动计划
+
+#### 步骤 1: 修正 `cmd.sh`
+
+您在 `cloud-run/base` 目录中已经有一个 `cmd.sh` 文件。我们需要确保它的内容是正确的。请用以下内容**替换**您 `cloud-run/base/cmd.sh` 的全部内容：
+
+```bash
+#!/bin/bash
+# 开启错误立即退出
+set -e
+
+echo "Starting Xvfb (virtual display)..."
+# 将 Xvfb 放到后台运行
+Xvfb :0 -ac -screen 0 1024x768x16 +extension RANDR &
+
+# 设置 DISPLAY 环境变量，让后续的 GUI 程序知道使用哪个虚拟屏幕
+export DISPLAY=:0
+
+echo "Starting gunicorn web server..."
+# 启动 gunicorn。它会加载 main.py，
+# main.py 中的 Environment 初始化会触发 IB Gateway 在后台启动。
+exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 0 main:app
+```
+**关键改动**：
+*   `exec gunicorn ...`: `exec` 会用 gunicorn 进程替换掉 shell 进程，这是在容器中作为主进程运行服务的标准做法。
+*   `--timeout 0`: 这个参数告诉 Gunicorn **永不**因为 worker 响应慢而超时。这给予了 IB Gateway 充足的时间在第一次请求时完成启动。
+
+#### 步骤 2: 修正 `ibgw.py` 以适应后台启动
+
+在您的 `lib/ibgw.py` 中，`start_and_connect` 方法会阻塞。我们需要稍微修改它，让 `ibc.start()` 在后台启动，而不是等待它完成。幸运的是，`IBC` 模块已经考虑到了这一点。
+
+**打开 `cloud-run/application/app/lib/ibgw.py` 文件。**
+
+**找到 `start_and_connect` 方法，并用以下版本替换它：**
+```python
+# In lib/ibgw.py
+
+def start_and_connect(self):
+    """
+    Starts the IB gateway with IBC in the background and connects to it.
+    """
+    if self.isConnected():
+        logging.info('Already connected to IB gateway.')
+        return
+
+    logging.info('Starting IBC process in the background...')
+    # ！！！核心改变：让 IBC 在后台启动，不阻塞 ！！！
+    # IBC 类的 start 方法本身就是非阻塞的，它会启动一个子进程。
+    # 我们只需要调用它，然后继续即可。
+    self.ibc.start()
+
+    logging.info('Attempting to connect to IB gateway...')
+    # ib_insync 的 connect 方法会自己处理重试和等待。
+    # 我们将连接超时完全交给它。
+    try:
+        self.connect(**self.ib_config, timeout=self.connection_timeout)
+        logging.info('Successfully connected to IB gateway.')
+    except Exception as e:
+        logging.error(f"Failed to connect to IB gateway within {self.connection_timeout}s: {e}")
+        # 即使连接失败，也要尝试终止 IBC 进程，避免留下僵尸进程
+        self.ibc.terminate()
+        raise e
+
+```
+这个修改确保了 `start_and_connect` 不会永远阻塞，而是让 `ib_insync` 库自己去处理连接和重试的逻辑。
+
+#### 步骤 3: 最终部署
+
+您已经拥有了所有正确的组件：
+*   一个正确的 `base/Dockerfile`。
+*   一个正确的 `main.py`。
+*   一个正确的 `cloudbuild.yaml`。
+*   现在还有一个正确的 `base/cmd.sh` 和 `lib/ibgw.py`。
+
+1.  **提交您的所有修改** (`main.py`, `base/Dockerfile`, `base/cmd.sh`, `lib/ibgw.py`)。
+    ```bash
+    git add .
+    git commit -m "Final fix: Separate IBGW and Gunicorn startup, set Gunicorn timeout to 0"
+    git push
+    ```
+2.  **重建基础镜像** (因为 `cmd.sh` 变了):
+    ```bash
+    cd ~/ib-trading/cloud-run/base
+    docker build -t "${FULL_BASE_IMAGE_NAME}" .
+    docker push "${FULL_BASE_IMAGE_NAME}"
+    cd ~/ib-trading
+    ```
+3.  **运行最后一次 Cloud Build 部署**:
+    ```bash
+    GIT_TAG=$(git rev-parse --short HEAD)
+    gcloud builds submit --config cloud-run/application/cloudbuild.yaml \
+      --substitutions=_TRADING_MODE=paper,_GCP_REGION=asia-east1,_MY_IMAGE_TAG=${GIT_TAG}
+    ```
+
+这次，`cmd.sh` 会先启动 `gunicorn`，让 Cloud Run 服务“健康”。当第一个 `/summary` 请求进来时，`Environment` 类被初始化，它会触发 `IBC` 在后台启动，`ib_insync` 会等待它就绪并连接。虽然第一个请求可能会慢一些（可能需要几十秒），但它**不会超时**，并且后续的请求会非常快。这套流程是解决此类问题的最终模式。
