@@ -30,6 +30,8 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
   # 关键验证：现在我们验证 jts.jar 是否被解压到了我们的目标路径
   && echo "Verifying that 'jts.jar' was extracted to ${twsPath}..." \
   && [ -n "$(find ${twsPath} -name "jts.jar" -print -quit)" ] \
+  # 复制 jts.ini 到 IB Gateway 安装目录
+  && cp ibc/jts.ini $(dirname $(find ${twsPath} -name "jts.jar" -print -quit))/jts.ini \
   # 下载并安装 IBC
   && wget -q -O /tmp/IBC.zip https://github.com/IbcAlpha/IBC/releases/download/3.12.0/IBCLinux-3.12.0.zip \
   && unzip /tmp/IBC.zip -d ${ibcPath} \
@@ -39,7 +41,6 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
 # --- 3. 复制配置文件和脚本 ---
 COPY ibc/config.ini ${ibcIni}
 # 将 jts.ini 复制到我们的安装根目录
-COPY ibc/jts.ini $(dirname $(find ${twsPath} -name "jts.jar" -print -quit))/jts.ini
 
 WORKDIR /home
 COPY cmd.sh cmd.sh
