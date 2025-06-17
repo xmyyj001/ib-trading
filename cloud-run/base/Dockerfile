@@ -29,6 +29,7 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
   && rm /tmp/ibgw.sh \
   # 关键验证：现在我们验证 jts.jar 是否被解压到了我们的目标路径
   && echo "Verifying that 'jts.jar' was extracted to ${twsPath}..." \
+  && ls -R ${twsPath} \
   && [ -n "$(find ${twsPath} -name "jts.jar" -print -quit)" ] \
   # 复制 jts.ini 到 IB Gateway 安装目录
   && cp ibc/jts.ini $(dirname $(find ${twsPath} -name "jts.jar" -print -quit))/jts.ini \
