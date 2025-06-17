@@ -205,7 +205,7 @@ graph TD
         ```bash
         gcloud run services update ib-paper \
             --region asia-east1 \
-            --update-secrets=IB_USERNAME=ib-gateway-username:latest,IB_PASSWORD=ib-gateway-password:latest \
+            --update-secrets=IB_CREDENTIALS_JSON=paper:latest \
             --set-env-vars=TRADING_MODE=paper # 确保 TRADING_MODE 也被设置
         ```
         将 `asia-east1` 替换为你的部署区域。

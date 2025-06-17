@@ -119,8 +119,8 @@ steps:
   - "--update-labels"
   - "app=ib-trading,trading-mode=${_TRADING_MODE}"
   - "--update-env-vars"
-  # Add TWS_VERSION here
-  - "PROJECT_ID=${PROJECT_ID},TRADING_MODE=${_TRADING_MODE},TWS_VERSION=981"
+  - "PROJECT_ID=${PROJECT_ID},TRADING_MODE=${_TRADING_MODE}"
+  - "--update-secrets=IB_CREDENTIALS_JSON=paper:latest"
 
 
 #### delete old revision(s)
