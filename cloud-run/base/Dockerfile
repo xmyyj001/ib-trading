@@ -25,7 +25,7 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
   # 'skip=$(grep -a -b -m 1 '^PK' /tmp/ibgw.sh | cut -d ':' -f 1)' 找到 ZIP 头的偏移量
   # 'dd if=/tmp/ibgw.sh of=/tmp/ibgw.zip skip=$skip bs=1' 提取 ZIP 数据
   # 为了简化，我们直接使用 unzip 的一个强大功能，让它自己找 ZIP 头
-  && unzip /tmp/ibgw.sh -d ${twsPath} \
+  && bash /tmp/ibgw.sh -q -dir "${twsPath}" \
   && rm /tmp/ibgw.sh \
   # 关键验证：现在我们验证 jts.jar 是否被解压到了我们的目标路径
   && echo "Verifying that 'jts.jar' was extracted to ${twsPath}..." \
