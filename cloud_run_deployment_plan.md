@@ -214,8 +214,17 @@ graph TD
     *   Cloud Run 服务会有一个 URL。你可以通过访问该 URL 来测试你的应用程序。
     *   例如，你可以使用 `curl` 命令来测试不同的 `intent`：
         ```bash
-        curl -X GET "YOUR_CLOUD_RUN_SERVICE_URL/summary"
-        curl -X POST -H "Content-Type: application/json" -d '{"some_param": "value"}' "YOUR_CLOUD_RUN_SERVICE_URL/allocation"
+        # 获取服务 URL
+        SERVICE_URL=$(gcloud run services describe ib-paper --region asia-east1 --format="value(status.url)")
+
+        # 获取身份令牌
+        TOKEN=$(gcloud auth print-identity-token)
+
+        # 测试 summary 意图
+        curl -X GET -H "Authorization: Bearer ${TOKEN}" "${SERVICE_URL}/summary"
+
+        # 测试 allocation 意图 (示例，根据实际需求修改请求体)
+        curl -X POST -H "Content-Type: application/json" -H "Authorization: Bearer ${TOKEN}" -d '{"dryRun": true, "strategies": ["dummy"]}' "${SERVICE_URL}/allocation"
         ```
         将 `YOUR_CLOUD_RUN_SERVICE_URL` 替换为你的 Cloud Run 服务的实际 URL。
     *   检查 Cloud Run 服务的日志，以确保应用程序正常启动并运行，并且交易逻辑按预期执行。

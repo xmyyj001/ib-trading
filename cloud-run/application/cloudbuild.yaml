@@ -119,7 +119,8 @@ steps:
   - "--update-labels"
   - "app=ib-trading,trading-mode=${_TRADING_MODE}"
   - "--update-env-vars"
-  - "PROJECT_ID=${PROJECT_ID},TRADING_MODE=${_TRADING_MODE}"
+  - "PROJECT_ID=${PROJECT_ID}"
+  - "TRADING_MODE=${_TRADING_MODE}"
   - "--update-secrets=IB_CREDENTIALS_JSON=paper:latest"
 
 
