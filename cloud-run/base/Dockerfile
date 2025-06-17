@@ -11,6 +11,8 @@ ENV ibcPath=/opt/ibc
 ENV javaPath=/usr/lib/jvm/java-17-openjdk-amd64/bin
 ENV DISPLAY=:0
 
+COPY ibc/jts.ini /tmp/jts.ini
+
 # --- 2. 全新的、最可靠的安装步骤 ---
 RUN apt-get update && apt-get install --no-install-recommends -y \
     wget unzip xvfb libxtst6 libxrender1 net-tools openjfx openjdk-17-jre-headless \
@@ -32,7 +34,7 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
   && ls -R ${twsPath} \
   && test -f "${twsPath}/jars/jts4launch-1030.jar" \
   # 复制 jts.ini 到 IB Gateway 安装目录
-  && cp ibc/jts.ini ${twsPath}/jars/jts.ini \
+  && cp /tmp/jts.ini ${twsPath}/jars/jts.ini \
   # 下载并安装 IBC
   && wget -q -O /tmp/IBC.zip https://github.com/IbcAlpha/IBC/releases/download/3.12.0/IBCLinux-3.12.0.zip \
   && unzip /tmp/IBC.zip -d ${ibcPath} \
