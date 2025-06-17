@@ -2,7 +2,7 @@ FROM python:3.9-slim
 
 # --- 1. 设置环境变量 ---
 # 我们将把所有 IB Gateway 的文件都放在 /root/ibgateway 目录下
-ENV TWS_VERSION=981
+ENV TWS_VERSION=1030
 ENV twsPath=/root/ibgateway
 ENV twsSettingsPath=/root/ibgateway
 ENV TWS_INSTALL_LOG=/root/ibgateway/install.log
@@ -30,9 +30,9 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
   # 关键验证：现在我们验证 jts.jar 是否被解压到了我们的目标路径
   && echo "Verifying that 'jts.jar' was extracted to ${twsPath}..." \
   && ls -R ${twsPath} \
-  && [ -n "$(find ${twsPath} -name "jts.jar" -print -quit)" ] \
+  && test -f "${twsPath}/jars/jts4launch-1030.jar" \
   # 复制 jts.ini 到 IB Gateway 安装目录
-  && cp ibc/jts.ini $(dirname $(find ${twsPath} -name "jts.jar" -print -quit))/jts.ini \
+  && cp ibc/jts.ini ${twsPath}/jars/jts.ini \
   # 下载并安装 IBC
   && wget -q -O /tmp/IBC.zip https://github.com/IbcAlpha/IBC/releases/download/3.12.0/IBCLinux-3.12.0.zip \
   && unzip /tmp/IBC.zip -d ${ibcPath} \
