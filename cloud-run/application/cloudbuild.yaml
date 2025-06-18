@@ -95,8 +95,7 @@ steps:
     python cloud-run/application/app/lib/init_firestore.py "${PROJECT_ID}"
     
     echo "Firestore initialization complete."
-
-#### deploy new revision
+# deploy new revision
 - name: 'gcr.io/cloud-builders/gcloud-slim'
   args:
   - "run"
@@ -116,12 +115,13 @@ steps:
   - "ib-trading@${PROJECT_ID}.iam.gserviceaccount.com"
   - "--revision-suffix"
   - "${_MY_IMAGE_TAG}"
-  - "--update-labels"
-  - "app=ib-trading,trading-mode=${_TRADING_MODE}"
-  - "--update-env-vars"
-  - "PROJECT_ID=${PROJECT_ID},TRADING_MODE=${_TRADING_MODE}"
-  - "--update-secrets=IB_CREDENTIALS_JSON=paper:latest"
-
+  # --- 修正部分开始 ---
+  - "--update-labels=app=ib-trading,trading-mode=${_TRADING_MODE}"
+  # 使用 --set-env-vars 更稳妥，确保环境一致性
+  - "--set-env-vars=PROJECT_ID=${PROJECT_ID},TRADING_MODE=${_TRADING_MODE}"
+  # 将密钥也设置为一个独立的、格式正确的参数
+  - "--update-secrets=IB_CREDENTIALS_JSON=${_TRADING_MODE}:latest"
+  # --- 修正部分结束 ---
 
 #### delete old revision(s)
 - name: "gcr.io/cloud-builders/gcloud-slim"
