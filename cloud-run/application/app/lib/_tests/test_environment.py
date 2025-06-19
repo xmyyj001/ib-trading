@@ -39,7 +39,9 @@ class TestEnvironment(unittest.TestCase):
                 **self.IBC_CONFIG,
                 'tradingMode': self.TRADING_MODE,
                 'userid': 'userid',
-                'password': 'password'
+                'password': 'password',
+                'ibcPath': None,  # 添加 ibcPath
+                'ibcIni': None    # 添加 ibcIni
             })
             db.document.assert_has_calls([call('config/common'), call(f'config/{self.TRADING_MODE}')])
             get_secret.assert_called_once_with(environment.SECRET_RESOURCE.format(self.PROJECT_ID, self.TRADING_MODE))
