@@ -32,15 +32,13 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
     && /tmp/ibgw.sh -q -dir "${TWS_PATH}/${TWS_VERSION}" \
     && rm /tmp/ibgw.sh \
     \
-    # --- 关键修正：验证并创建符号链接 ---
+    # 验证并创建符号链接
     && echo "正在验证安装..." \
     && ls -lR ${TWS_PATH} \
-    # 1. 验证那个带版本号的 jar 文件确实存在
     && if [ ! -f "${TWS_PATH}/${TWS_VERSION}/jars/jts4launch-${TWS_VERSION}.jar" ]; then \
         echo "错误: 未找到核心文件 ${TWS_PATH}/${TWS_VERSION}/jars/jts4launch-${TWS_VERSION}.jar！" >&2; \
         exit 1; \
     fi \
-    # 2. 创建一个名为 jts.jar 的符号链接，指向真实的文件
     && echo "正在创建 jts.jar 符号链接..." \
     && ln -s "${TWS_PATH}/${TWS_VERSION}/jars/jts4launch-${TWS_VERSION}.jar" "${TWS_PATH}/${TWS_VERSION}/jars/jts.jar" \
     && echo "安装验证成功。" \
@@ -50,11 +48,12 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
     && wget -q -O /tmp/IBC.zip https://github.com/IbcAlpha/IBC/releases/download/3.12.0/IBCLinux-3.12.0.zip \
     && unzip /tmp/IBC.zip -d ${IBC_PATH} \
     && chmod +x ${IBC_PATH}/*.sh ${IBC_PATH}/*/*.sh \
-    && rm /tmp/IBC.zip
-    # 将 vmoptions 文件复制到 IBC 目录，以便我们能用一个固定的路径引用它
+    && rm /tmp/IBC.zip \
+    \
+    # --- 关键修正：确保这一段在 RUN 指令内部 ---
     && echo "正在复制 vmoptions 文件..." \
     && cp "${TWS_PATH}/${TWS_VERSION}/ibgateway.vmoptions" "${IBC_PATH}/ibgateway.vmoptions"
-    
+
 # --- 3. 复制配置文件 ---
 COPY ibc/config.ini ${IBC_INI}
 COPY ibc/jts.ini "${TWS_PATH}/${TWS_VERSION}/jts.ini"
