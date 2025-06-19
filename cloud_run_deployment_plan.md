@@ -186,11 +186,11 @@ graph TD
         ```
         请确保 `_TRADING_MODE` 和 `_GCP_REGION` 的值与你的需求一致。 -->
 
-        ```
+        ```bash 
         GIT_TAG=$(git rev-parse --short HEAD)
-        ```
+        
         then:
-        ```
+        
         gcloud builds submit --config cloud-run/application/cloudbuild.yaml \
         --substitutions=_TRADING_MODE=paper,_GCP_REGION=asia-east1,_MY_IMAGE_TAG=${GIT_TAG:-manual-latest} .
         ```
@@ -246,7 +246,6 @@ graph TD
         ```
 
     将 [YOUR_GCLOUD_EMAIL] 替换为您的 Google Cloud 账号邮箱地址。
-
 
     *   使用身份验证的 curl 请求测试：
 

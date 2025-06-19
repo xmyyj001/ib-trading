@@ -1,53 +1,71 @@
+# 使用 Python 3.9 slim 作为基础镜像
 FROM python:3.9-slim
 
-# --- 1. 设置环境变量 ---
-# 我们将把所有 IB Gateway 的文件都放在 /root/ibgateway 目录下
+# --- 1. 环境变量 ---
+# 将版本和路径统一定义，方便维护。
+# 我们将按照 IBC 脚本的要求，把 IB Gateway 安装到一个带版本号的子目录里。
 ENV TWS_VERSION=1030
-ENV twsPath=/root/ibgateway
-ENV twsSettingsPath=/root/ibgateway
-ENV TWS_INSTALL_LOG=/root/ibgateway/install.log
-ENV ibcIni=/root/ibc/config.ini
-ENV ibcPath=/opt/ibc
-ENV javaPath=/usr/lib/jvm/java-17-openjdk-amd64/bin
+# IB Gateway 相关文件的主要安装路径
+ENV TWS_PATH=/root/ibgateway
+# 用户设置文件的路径 (可以和 TWS_PATH 相同)
+ENV TWS_SETTINGS_PATH=/root/ibgateway
+# IBC 的安装路径
+ENV IBC_PATH=/opt/ibc
+# IBC 配置文件的路径
+ENV IBC_INI=${IBC_PATH}/config.ini
+# 为虚拟屏幕设置显示器
 ENV DISPLAY=:0
 
-COPY ibc/jts.ini /tmp/jts.ini
-
-# --- 2. 全新的、最可靠的安装步骤 ---
+# --- 2. 安装依赖与 IB Gateway ---
+# 将所有安装步骤合并到单个 RUN 命令中，以优化镜像层的大小。
 RUN apt-get update && apt-get install --no-install-recommends -y \
-    wget unzip xvfb libxtst6 libxrender1 net-tools openjfx openjdk-17-jre-headless \
-  && apt-get clean && apt-get -y autoremove \
-  # 创建我们的目标目录
-  && mkdir -p /tmp ${ibcPath} ${twsPath} \
-  # 下载 IB Gateway 安装脚本
-  && wget -q -O /tmp/ibgw.sh https://download2.interactivebrokers.com/installers/ibgateway/stable-standalone/ibgateway-stable-standalone-linux-x64.sh \
-  && chmod +x /tmp/ibgw.sh \
-  # 核心改变：不再运行 .sh 脚本，而是直接用 unzip 解压它！
-  # 我们需要找到 .sh 文件中实际数据的起始点，通常可以通过 'tail' 和一个偏移量来实现
-  # 'skip=$(grep -a -b -m 1 '^PK' /tmp/ibgw.sh | cut -d ':' -f 1)' 找到 ZIP 头的偏移量
-  # 'dd if=/tmp/ibgw.sh of=/tmp/ibgw.zip skip=$skip bs=1' 提取 ZIP 数据
-  # 为了简化，我们直接使用 unzip 的一个强大功能，让它自己找 ZIP 头
-  && bash /tmp/ibgw.sh -q -dir "${twsPath}" \
-  && rm /tmp/ibgw.sh \
-  # 关键验证：现在我们验证 jts.jar 是否被解压到了我们的目标路径
-  && echo "Verifying that 'jts.jar' was extracted to ${twsPath}..." \
-  && ls -R ${twsPath} \
-  && test -f "${twsPath}/jars/jts4launch-1030.jar" \
-  # 复制 jts.ini 到 IB Gateway 安装目录
-  && cp /tmp/jts.ini ${twsPath}/jars/jts.ini \
-  # 下载并安装 IBC
-  && wget -q -O /tmp/IBC.zip https://github.com/IbcAlpha/IBC/releases/download/3.12.0/IBCLinux-3.12.0.zip \
-  && unzip /tmp/IBC.zip -d ${ibcPath} \
-  && chmod +x ${ibcPath}/*.sh ${ibcPath}/*/*.sh \
-  && rm /tmp/IBC.zip
+    wget \
+    unzip \
+    xvfb \
+    libxtst6 \
+    libxrender1 \
+    openjdk-17-jre-headless \
+    && apt-get clean && apt-get -y autoremove \
+    \
+    # 创建必要的目录
+    && mkdir -p ${TWS_PATH} ${IBC_PATH} /tmp \
+    \
+    # 下载并安装 IB Gateway
+    && echo "正在下载 IB Gateway..." \
+    && wget -q -O /tmp/ibgw.sh https://download2.interactivebrokers.com/installers/ibgateway/stable-standalone/ibgateway-stable-standalone-linux-x64.sh \
+    && chmod +x /tmp/ibgw.sh \
+    \
+    # 关键修正：将 IBG 安装到一个带版本号的子目录中
+    && echo "正在将 IB Gateway 安装到 ${TWS_PATH}/${TWS_VERSION}..." \
+    && /tmp/ibgw.sh -q -dir "${TWS_PATH}/${TWS_VERSION}" \
+    && rm /tmp/ibgw.sh \
+    \
+    # 关键验证：检查核心的 .jar 文件是否存在于正确的路径下
+    && echo "正在验证安装..." \
+    && ls -lR ${TWS_PATH} \
+    && if [ ! -f "${TWS_PATH}/${TWS_VERSION}/jars/jts.jar" ]; then \
+        echo "错误: 在 ${TWS_PATH}/${TWS_VERSION}/jars/ 中未找到 jts.jar 文件！" >&2; \
+        exit 1; \
+    fi \
+    && echo "安装验证成功。" \
+    \
+    # 下载并安装 IBC (控制脚本)
+    && echo "正在下载并安装 IBC..." \
+    && wget -q -O /tmp/IBC.zip https://github.com/IbcAlpha/IBC/releases/download/3.12.0/IBCLinux-3.12.0.zip \
+    && unzip /tmp/IBC.zip -d ${IBC_PATH} \
+    && chmod +x ${IBC_PATH}/*.sh ${IBC_PATH}/*/*.sh \
+    && rm /tmp/IBC.zip
 
-# --- 3. 复制配置文件和脚本 ---
-COPY ibc/config.ini ${ibcIni}
-# 将 jts.ini 复制到我们的安装根目录
+# --- 3. 复制配置文件 ---
+# 复制我们为 IBC 自定义的配置文件
+COPY ibc/config.ini ${IBC_INI}
+# 将 jts.ini 复制到带版本号的 IBG 安装目录内的正确位置
+COPY ibc/jts.ini "${TWS_PATH}/${TWS_VERSION}/jts.ini"
 
+# --- 4. 设置应用目录 ---
 WORKDIR /home
 COPY cmd.sh cmd.sh
 RUN chmod +x cmd.sh
 
-# --- 4. 最终的 CMD ---
+# 这个 CMD 只是用于创建基础镜像，应用层的 Dockerfile 会覆盖它。
 CMD tail -f /dev/null
