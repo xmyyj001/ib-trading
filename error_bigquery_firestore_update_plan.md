@@ -137,57 +137,57 @@ cd ~/ib-trading
 ```
 
 ### 3.6 创建BigQuery数据集
-```bash
-PROJECT_ID="gold-gearbox-424413-k1"
-BQ_LOCATION="EU"
-DATASET_ID="historical_data"
-TABLE_ID="test"
+    ```bash
+        PROJECT_ID="gold-gearbox-424413-k1"
+        BQ_LOCATION="EU"
+        DATASET_ID="historical_data"
+        TABLE_ID="test"
 
-# 创建数据集
-bq show --project_id="${PROJECT_ID}" --format=prettyjson "${DATASET_ID}" > /dev/null 2>&1 || \
-bq --location="${BQ_LOCATION}" mk --dataset \
-    --description="Dataset for historical trading data" \
-    "${PROJECT_ID}:${DATASET_ID}"
+        # 创建数据集
+        bq show --project_id="${PROJECT_ID}" --format=prettyjson "${DATASET_ID}" > /dev/null 2>&1 || \
+        bq --location="${BQ_LOCATION}" mk --dataset \
+            --description="Dataset for historical trading data" \
+            "${PROJECT_ID}:${DATASET_ID}"
 
-# 创建测试表
-bq show --project_id="${PROJECT_ID}" --format=prettyjson "${DATASET_ID}.${TABLE_ID}" > /dev/null 2>&1 || \
-bq mk --table \
-    --description "Test table for integration tests" \
-    "${PROJECT_ID}:${DATASET_ID}.${TABLE_ID}" \
-    date:DATE,instrument:STRING,key:STRING,value:FLOAT64
-```
+        # 创建测试表
+        bq show --project_id="${PROJECT_ID}" --format=prettyjson "${DATASET_ID}.${TABLE_ID}" > /dev/null 2>&1 || \
+        bq mk --table \
+            --description "Test table for integration tests" \
+            "${PROJECT_ID}:${DATASET_ID}.${TABLE_ID}" \
+            date:DATE,instrument:STRING,key:STRING,value:FLOAT64
+    ```
 
 ### 3.7 创建Firestore数据库
-```bash
-PROJECT_ID="gold-gearbox-424413-k1"
-FIRESTORE_LOCATION="asia-east1"
+        ```bash
+        PROJECT_ID="gold-gearbox-424413-k1"
+        FIRESTORE_LOCATION="asia-east1"
 
-# 通过gcloud创建Firestore数据库
-gcloud firestore databases create --location="${FIRESTORE_LOCATION}" --type=firestore-native \
-    --project="${PROJECT_ID}" || echo "Firestore database likely already exists"
-```
+        # 通过gcloud创建Firestore数据库
+        gcloud firestore databases create --location="${FIRESTORE_LOCATION}" --type=firestore-native \
+            --project="${PROJECT_ID}" || echo "Firestore database likely already exists"
+        ```
 
 ### 3.8 配置Secret Manager
-```bash
-PROJECT_ID="gold-gearbox-424413-k1"
-SECRET_NAME="paper"
+        ```bash
+        PROJECT_ID="gold-gearbox-424413-k1"
+        SECRET_NAME="paper"
 
-# 创建secret容器
-gcloud secrets describe "${SECRET_NAME}" --project="${PROJECT_ID}" > /dev/null 2>&1 || \
-gcloud secrets create "${SECRET_NAME}" \
-    --replication-policy="automatic" \
-    --project="${PROJECT_ID}"
+        # 创建secret容器
+        gcloud secrets describe "${SECRET_NAME}" --project="${PROJECT_ID}" > /dev/null 2>&1 || \
+        gcloud secrets create "${SECRET_NAME}" \
+            --replication-policy="automatic" \
+            --project="${PROJECT_ID}"
 
-# 添加secret版本（替换为您的真实凭据）
-gcloud secrets versions add "${SECRET_NAME}" --project="${PROJECT_ID}" \
---data-file=- <<< '{"userid": "YOUR_PAPER_USERID", "password": "YOUR_PAPER_PASSWORD"}'
+        # 添加secret版本（替换为您的真实凭据）
+        gcloud secrets versions add "${SECRET_NAME}" --project="${PROJECT_ID}" \
+        --data-file=- <<< '{"userid": "YOUR_PAPER_USERID", "password": "YOUR_PAPER_PASSWORD"}'
 
-# 授予Cloud Run服务账号访问权限
-gcloud secrets add-iam-policy-binding "${SECRET_NAME}" \
-    --member="serviceAccount:ib-trading@${PROJECT_ID}.iam.gserviceaccount.com" \
-    --role="roles/secretmanager.secretAccessor" \
-    --project="${PROJECT_ID}"
-```
+        # 授予Cloud Run服务账号访问权限
+        gcloud secrets add-iam-policy-binding "${SECRET_NAME}" \
+            --member="serviceAccount:ib-trading@${PROJECT_ID}.iam.gserviceaccount.com" \
+            --role="roles/secretmanager.secretAccessor" \
+            --project="${PROJECT_ID}"
+        ```
 
 ---
 
@@ -203,7 +203,11 @@ gcloud builds submit --config cloud-run/application/cloudbuild.yaml \
 
 # 3.如果出现运行结果错误，可以读取日志，以查错
 gcloud run services logs read ib-paper --region asia-east1 --limit 100
+
+# 4.出现问题删除cloud-run 
+gcloud run services delete ib-paper --region asia-east1
 ```
+
 
 ---
 
@@ -222,24 +226,3 @@ gcloud run services logs read ib-paper --region asia-east1 --limit 100
   ]
 ```
 
-在`integration_tests.py`中使用版本：
-```python
-mock_tws_version = environ.get('MOCK_TWS_VERSION')
-extracted_tws_version = None
-
-if mock_tws_version:
-    extracted_tws_version = mock_tws_version
-    print(f"Using MOCK_TWS_VERSION: {extracted_tws_version}")
-else:
-    # 原始解析逻辑
-    tws_version_match = re.search('IB Gateway ([0-9]{3})', install_log_content)
-    if tws_version_match:
-        extracted_tws_version = tws_version_match.group(1)
-    else:
-        print("Warning: IB Gateway version not found")
-
-ibc_config = {
-    'gateway': True,
-    'twsVersion': extracted_tws_version,  # 优先使用mock版本
-    **env_vars
-}

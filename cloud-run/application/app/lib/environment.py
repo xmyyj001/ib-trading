@@ -1,4 +1,5 @@
 import json
+import os
 from ib_insync import util
 import logging
 from os import environ
@@ -31,7 +32,7 @@ class Environment:
                     self._logging.critical("Failed to decode IB_CREDENTIALS_JSON environment variable.")
                     raise ValueError("Environment configuration could not be loaded due to invalid JSON.")
             elif 'IB_USERNAME' in environ and 'IB_PASSWORD' in environ:
-                secrets['userd'] = environ.get('IB_USERNAME')
+                secrets['userid'] = environ.get('IB_USERNAME')  # 修复拼写错误
                 secrets['password'] = environ.get('IB_PASSWORD')
             else:
                 secrets = self.get_secret(self.SECRET_RESOURCE.format(self._env['PROJECT_ID'], self._trading_mode))
@@ -39,6 +40,10 @@ class Environment:
             if secrets is None:
                 self._logging.critical("Failed to load environment variables from secret manager. They were None.")
                 raise ValueError("Environment configuration could not be loaded.")
+            
+            # 优先使用环境变量中的 TWS_PATH
+            if 'TWS_PATH' in os.environ:
+                ibc_config['twsPath'] = os.environ['TWS_PATH']
 
             config = {
                 **ibc_config,
