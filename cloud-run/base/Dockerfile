@@ -51,7 +51,10 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
     && unzip /tmp/IBC.zip -d ${IBC_PATH} \
     && chmod +x ${IBC_PATH}/*.sh ${IBC_PATH}/*/*.sh \
     && rm /tmp/IBC.zip
-
+    # 将 vmoptions 文件复制到 IBC 目录，以便我们能用一个固定的路径引用它
+    && echo "正在复制 vmoptions 文件..." \
+    && cp "${TWS_PATH}/${TWS_VERSION}/ibgateway.vmoptions" "${IBC_PATH}/ibgateway.vmoptions"
+    
 # --- 3. 复制配置文件 ---
 COPY ibc/config.ini ${IBC_INI}
 COPY ibc/jts.ini "${TWS_PATH}/${TWS_VERSION}/jts.ini"
