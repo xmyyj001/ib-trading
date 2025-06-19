@@ -25,14 +25,14 @@ class Environment:
             if 'IB_CREDENTIALS_JSON' in environ:
                 try:
                     credentials = json.loads(environ.get('IB_CREDENTIALS_JSON'))
-                    secrets['ibLoginId'] = credentials.get('userid')
-                    secrets['ibPassword'] = credentials.get('password')
+                    secrets['userid'] = credentials.get('userid')
+                    secrets['password'] = credentials.get('password')
                 except json.JSONDecodeError:
                     self._logging.critical("Failed to decode IB_CREDENTIALS_JSON environment variable.")
                     raise ValueError("Environment configuration could not be loaded due to invalid JSON.")
             elif 'IB_USERNAME' in environ and 'IB_PASSWORD' in environ:
-                secrets['ibLoginId'] = environ.get('IB_USERNAME')
-                secrets['ibPassword'] = environ.get('IB_PASSWORD')
+                secrets['userd'] = environ.get('IB_USERNAME')
+                secrets['password'] = environ.get('IB_PASSWORD')
             else:
                 secrets = self.get_secret(self.SECRET_RESOURCE.format(self._env['PROJECT_ID'], self._trading_mode))
 
