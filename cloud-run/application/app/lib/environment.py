@@ -50,6 +50,14 @@ class Environment:
                 'tradingMode': self._trading_mode,
                 **secrets
             }
+
+            # 确保关键路径是从环境变量中设置的，覆盖任何可能传入的 None 值。
+            # 这使得应用对配置错误更具弹性。
+            config['ibcPath'] = environ.get('IBC_PATH', config.get('ibcPath'))
+            config['ibcIni'] = environ.get('IBC_INI', config.get('ibcIni'))
+            config['twsPath'] = environ.get('TWS_PATH', config.get('twsPath'))
+            # --- 修正代码结束 ---
+
             self._logging.debug({**config, 'password': 'xxx'})
 
             # query config
