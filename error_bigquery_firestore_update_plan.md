@@ -118,23 +118,26 @@ gcloud artifacts repositories create eu.gcr.io \
 ```
 
 ### 3.5 构建基础镜像
-```bash
-PROJECT_ID="gold-gearbox-424413-k1"
-AR_LOCATION="europe"
-BASE_IMAGE_REPO_IN_AR="eu.gcr.io"
-BASE_IMAGE_PATH_IN_REPO="cloud-run/base"
-BASE_IMAGE_TAG="latest"
-FULL_BASE_IMAGE_NAME="${AR_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${BASE_IMAGE_REPO_IN_AR}/${BASE_IMAGE_PATH_IN_REPO}:${BASE_IMAGE_TAG}"
+                ```bash
+                PROJECT_ID="gold-gearbox-424413-k1"
+                AR_LOCATION="europe"
+                BASE_IMAGE_REPO_IN_AR="eu.gcr.io"
+                BASE_IMAGE_PATH_IN_REPO="cloud-run/base"
+                BASE_IMAGE_TAG="latest"
+                FULL_BASE_IMAGE_NAME="${AR_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${BASE_IMAGE_REPO_IN_AR}/${BASE_IMAGE_PATH_IN_REPO}:${BASE_IMAGE_TAG}"
 
-# 配置Docker认证
-gcloud auth configure-docker "${AR_LOCATION}-docker.pkg.dev" --project="${PROJECT_ID}"
+                # 配置Docker认证
+                gcloud auth configure-docker "${AR_LOCATION}-docker.pkg.dev" --project="${PROJECT_ID}"
 
-# 构建并推送镜像
+                # 构建并推送镜像
+                cd ~/ib-trading/cloud-run/base
+                docker build -t "${FULL_BASE_IMAGE_NAME}" .
+                docker push "${FULL_BASE_IMAGE_NAME}"
+                cd ~/ib-trading
+                ```
 cd ~/ib-trading/cloud-run/base
-docker build -t "${FULL_BASE_IMAGE_NAME}" .
-docker push "${FULL_BASE_IMAGE_NAME}"
-cd ~/ib-trading
-```
+gcloud builds submit --tag "europe-docker.pkg.dev/gold-gearbox-424413-k1/cloud-run-repo/base:latest" .
+
 
 ### 3.6 创建BigQuery数据集
     ```bash
@@ -201,6 +204,10 @@ GIT_TAG=$(git rev-parse --short HEAD)
 gcloud builds submit --config cloud-run/application/cloudbuild.yaml \
   --substitutions=_TRADING_MODE=paper,_GCP_REGION=asia-east1,_MY_IMAGE_TAG=${GIT_TAG:-manual-latest} .
 
+
+# 查看实时日志: 打开一个新的 Cloud Shell 标签页，运行以下命令来持续监听新的日志：
+gcloud run services logs tail ib-paper --region asia-east1
+
 # 3.如果出现运行结果错误，可以读取日志，以查错
 gcloud run services logs read ib-paper --region asia-east1 --limit 100
 
@@ -210,19 +217,10 @@ gcloud run services delete ib-paper --region asia-east1
 
 
 ---
-
-## TWS安装日志说明
-在`cloudbuild.yaml`的集成测试步骤中配置环境变量：
-
-```yaml
-- name: 'gcr.io/cloud-builders/docker'
-  args: [
-      'run',
-      '--network', 'cloudbuild',
-      '--volume', '/workspace:/workspace',
-      '--env', 'MOCK_TWS_VERSION=981',     # 提供模拟版本
-      '--env', 'TWS_INSTALL_LOG=/tmp/dummy_install.log', # 指向空文件
-      ...
-  ]
-```
+# 替代的测试方法
+SERVICE_URL=$(gcloud run services describe ib-paper --region asia-east1 --format="value(status.url)")
+TOKEN=$(gcloud auth print-identity-token)
+echo "正在测试服务: ${SERVICE_URL}"
+curl --connect-timeout 60 -v -X GET -H "Authorization: Bearer ${TOKEN}" "${SERVICE_URL}/summary"
+正在测试服务: https://ib-paper-gkf7rfijba-de.a.run.app
 
