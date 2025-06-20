@@ -1,0 +1,9 @@
+3. 重新部署并观察
+修改 ibc/config.ini 如上。
+提交并推送 (git add ibc/config.ini, git commit ..., git push)。这会触发一次新的自动部署。
+耐心等待并监听日志: 部署完成后，立刻开始用:
+ gcloud run services logs tail ib-paper --region asia-east1 监听日志。
+我们期待在新的日志中看到：
+不再是简单的 Starting IBC...，而是更多来自 displaybannerandlaunch.sh 和 ibcstart.sh 的详细输出。
+可能会有 IB Gateway 的 Java 进程打印出的、关于登录状态的日志。
+可能会有明确的错误信息，比如 "Login failed" 或 "Two-factor authentication required"。
