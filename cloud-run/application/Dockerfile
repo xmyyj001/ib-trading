@@ -1,12 +1,9 @@
-# 定义构建参数，并提供默认值
-ARG BASE_IMAGE_TAG=latest
-ARG GCP_PROJECT_ID  # 您的项目ID
-ARG AR_REPO_NAME=eu.gcr.io # 您的 Artifact Registry 仓库名 (这里是 eu.gcr.io)
+# 最终版 application/Dockerfile
+# 我们不再使用任何构建参数 (ARG)，直接硬编码最终正确的镜像地址。
+# 这能保证无论在何种环境下构建，基础镜像的来源都是唯一的、正确的。
+FROM europe-docker.pkg.dev/gold-gearbox-424413-k1/cloud-run-repo/base:latest
 
-# 使用构建参数构建基础镜像的完整路径
-FROM europe-docker.pkg.dev/${GCP_PROJECT_ID}/${AR_REPO_NAME}/cloud-run/base:${BASE_IMAGE_TAG}
-
-# 设置 TWS_PATH 环境变量，让 IBC 脚本能直接找到它
+# 设置 TWS_PATH 环境变量，这个环境变量会被应用继承
 ENV TWS_PATH=/root/ibgateway
 
 # copy Python application and pip install packages
