@@ -199,7 +199,12 @@ gcloud builds submit --tag "europe-docker.pkg.dev/gold-gearbox-424413-k1/cloud-r
 # 1. 确保代码是最新的
 git pull origin master
 
-# 2. 运行Cloud Build部署
+# 2.1 部署基础镜像
+
+cd ~/ib-trading/cloud-run/base
+gcloud builds submit --tag "europe-docker.pkg.dev/gold-gearbox-424413-k1/cloud-run-repo/base:latest" .
+
+# 2.2 运行Cloud Build部署
 GIT_TAG=$(git rev-parse --short HEAD)
 gcloud builds submit --config cloud-run/application/cloudbuild.yaml \
   --substitutions=_TRADING_MODE=paper,_GCP_REGION=asia-east1,_MY_IMAGE_TAG=${GIT_TAG:-manual-latest} .
