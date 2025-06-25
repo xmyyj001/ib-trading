@@ -119,21 +119,36 @@ gcloud artifacts repositories create eu.gcr.io \
 
 ### 3.5 构建基础镜像
 ```bash
+# --- 1. 正确的变量定义 ---
 PROJECT_ID="gold-gearbox-424413-k1"
 AR_LOCATION="europe"
-BASE_IMAGE_REPO_IN_AR="eu.gcr.io"
-BASE_IMAGE_PATH_IN_REPO="cloud-run/base"
+# 你的 Artifact Registry 仓库名称
+AR_REPO_NAME="cloud-run-repo" 
+# 镜像在仓库中的路径/名称
+BASE_IMAGE_NAME="base"
 BASE_IMAGE_TAG="latest"
-FULL_BASE_IMAGE_NAME="${AR_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${BASE_IMAGE_REPO_IN_AR}/${BASE_IMAGE_PATH_IN_REPO}:${BASE_IMAGE_TAG}"
+# --- 2. 拼接正确的完整镜像名称 ---
+# 格式: <location>-docker.pkg.dev/<project-id>/<repo-name>/<image-name>:<tag>
+FULL_BASE_IMAGE_NAME="${AR_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO_NAME}/${BASE_IMAGE_NAME}:${BASE_IMAGE_TAG}"
 
-# 配置Docker认证
+echo ">>> Target image name: ${FULL_BASE_IMAGE_NAME}"
+# --- 3. 配置Docker认证 ---
+echo ">>> Configuring Docker authentication..."
 gcloud auth configure-docker "${AR_LOCATION}-docker.pkg.dev" --project="${PROJECT_ID}"
-
-# 构建并推送镜像
+# --- 4. 构建并推送镜像 ---
+# 确保在正确的目录下执行
 cd ~/ib-trading/cloud-run/base
+echo ">>> Building image..."
 docker build -t "${FULL_BASE_IMAGE_NAME}" .
+echo ">>> Pushing image..."
 docker push "${FULL_BASE_IMAGE_NAME}"
+# 返回到项目根目录
 cd ~/ib-trading
+echo ">>> Base image push complete!"
+
+# --- 5. (可选但推荐) 验证推送是否成功 ---
+echo ">>> Verifying image in Artifact Registry..."
+gcloud artifacts docker images list "${AR_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO_NAME}/${BASE_IMAGE_NAME}" --include-tags
 ```
 
 ### 3.6 创建BigQuery数据集

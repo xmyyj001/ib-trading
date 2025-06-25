@@ -61,7 +61,6 @@ steps:
 substitutions:
   _GCP_REGION: asia-east1
   _TRADING_MODE: paper
-  _KEEP: "3"
   _MY_IMAGE_TAG: "latest" # 默认值，可以被命令行覆盖
 
 timeout: "1200s"
