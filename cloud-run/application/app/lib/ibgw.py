@@ -5,7 +5,7 @@ from lib.gcp import logger as logging
 
 class IBGW(IB):
 
-    IB_CONFIG = {'host': '127.0.0.1', 'port': 4001, 'clientId': 1}
+    IB_CONFIG = {'host': '127.0.0.1', 'port': 4002, 'clientId': 1}
 
     def __init__(self, ibc_config, ib_config=None, connection_timeout=60, timeout_sleep=5):
         super().__init__()
