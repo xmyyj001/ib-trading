@@ -1,19 +1,24 @@
-# 定义构建参数，并提供默认值
-ARG BASE_IMAGE_TAG=latest
-ARG GCP_PROJECT_ID  # 您的项目ID
-ARG AR_REPO_NAME=eu.gcr.io # 您的 Artifact Registry 仓库名 (这里是 eu.gcr.io)
+# ===================================================================
+# == FINAL CORRECTED application/Dockerfile
+# ===================================================================
 
-# 使用构建参数构建基础镜像的完整路径
-FROM europe-docker.pkg.dev/${GCP_PROJECT_ID}/${AR_REPO_NAME}/cloud-run/base:${BASE_IMAGE_TAG}
+# 1. 从正确的、静态的 base 镜像地址开始
+FROM europe-docker.pkg.dev/gold-gearbox-424413-k1/cloud-run-repo/base:latest
 
-# 设置 TWS_PATH 环境变量，让 IBC 脚本能直接找到它
-ENV TWS_PATH=/root/ibgateway
+# 2. 设置工作目录
+WORKDIR /home/app
 
-# copy Python application and pip install packages
-WORKDIR /home
-COPY app .
-RUN python -m pip install --upgrade pip
-RUN pip install --no-cache-dir -r requirements.txt
+# 3. 复制并安装依赖 (包含 gunicorn)
+COPY app/requirements.txt .
+RUN python -m pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
-# execute cmd script
+# 4. 复制应用代码
+COPY app/ .
+
+# 5. 复制应用专属的启动脚本
+COPY cmd.sh .
+RUN chmod +x cmd.sh
+
+# 6. 执行启动脚本
 CMD ["./cmd.sh"]

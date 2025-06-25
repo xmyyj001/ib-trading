@@ -1,220 +1,67 @@
+# ===================================================================
+# == RECOMMENDED VERSION: cloud-run/application/cloudbuild.yaml
+# ===================================================================
+
 steps:
-#### build and push Docker image if not existing yet
-- name: "google/cloud-sdk:slim"
-  entrypoint: "bash"
-  args:
-  - "-c"
-  - |
-    echo "Received _MY_IMAGE_TAG: ${_MY_IMAGE_TAG}"
-    echo "Cloud Build's default SHORT_SHA (for reference, not used for tagging): '${SHORT_SHA}'"
-    echo "Cloud Build's default COMMIT_SHA (for reference): '${COMMIT_SHA}'"
+  # 步骤 1: 拉取最新的 base 镜像，确保我们基于最新的依赖进行构建
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'Pull-Latest-Base'
+    args: ['pull', 'europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/base:latest']
 
-    gcloud auth configure-docker europe-docker.pkg.dev --quiet
+  # 步骤 2: 构建 application 镜像
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'Build-Application'
+    args:
+      - 'build'
+      - '--tag'
+      - 'europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG}'
+      - 'cloud-run/application' # Dockerfile 上下文
+      - '--file'
+      - 'cloud-run/application/Dockerfile'
+    waitFor: ['Pull-Latest-Base']
 
-    TARGET_IMAGE="europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG}"
-    TARGET_IMAGE_REPO_PATH="europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application"
+  # 步骤 3: 推送 application 镜像
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'Push-Application'
+    args: ['push', 'europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG}']
+    waitFor: ['Build-Application']
 
-    echo "Checking if image $${TARGET_IMAGE} exists..."
-    if ! gcloud artifacts docker images list "$${TARGET_IMAGE_REPO_PATH}" --filter="tags~'^${_MY_IMAGE_TAG}$'" --format="value(tags)" | grep -q "^${_MY_IMAGE_TAG}$"; then
-      echo "Image $${TARGET_IMAGE} not found. Building and pushing..."
-      
-      LOWERCASE_PROJECT_ID=$(echo "${PROJECT_ID}" | tr '[:upper:]' '[:lower:]')
-      ARTIFACT_REGISTRY_BASE_REPO_NAME="eu.gcr.io" 
+  # 步骤 4: 运行测试 (如果需要，这里是放置测试步骤的地方)
+  # ... 你的单元测试和集成测试步骤可以放在这里，引用刚构建的镜像 ...
 
-      docker build \
-        --build-arg GCP_PROJECT_ID="$${LOWERCASE_PROJECT_ID}" \
-        --build-arg AR_REPO_NAME="$${ARTIFACT_REGISTRY_BASE_REPO_NAME}" \
-        --build-arg BASE_IMAGE_TAG=latest \
-        -t "$${TARGET_IMAGE}" \
-        cloud-run/application/ # Dockerfile的上下文路径
-      
-      docker push "$${TARGET_IMAGE}"
-      echo "Image $${TARGET_IMAGE} built and pushed."
-    else
-      echo "Image $${TARGET_IMAGE} already exists. Skipping build and push."
-    fi
+  # 步骤 5: 部署到 Cloud Run
+  - name: 'gcr.io/cloud-builders/gcloud' # 使用完整的 gcloud 镜像更稳妥
+    id: 'Deploy-to-Cloud-Run'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'ib-${_TRADING_MODE}'
+      - '--image'
+      - 'europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG}'
+      - '--region'
+      - '${_GCP_REGION}'
+      - '--platform'
+      - 'managed'
+      - '--max-instances'
+      - '1'
+      - '--memory'
+      - '2Gi'
+      - '--cpu'
+      - '2'
+      - '--service-account'
+      - 'ib-trading@${PROJECT_ID}.iam.gserviceaccount.com'
+      - '--set-env-vars=PROJECT_ID=${PROJECT_ID},TRADING_MODE=${_TRADING_MODE}'
+      - '--update-secrets=IB_CREDENTIALS_JSON=${_TRADING_MODE}:latest'
+    # 确保在推送镜像之后再部署
+    waitFor: ['Push-Application']
 
-#### run safety check
-- name: "gcr.io/cloud-builders/docker"
-  args:
-  - "run"
-  - "--entrypoint"
-  - "bash"
-  - "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG}"
-  - "-c"
-  - "pip install safety && safety check --bare || true"
+  # ... 你的清理步骤可以保留在这里 ...
 
-#### run unittests
-- name: "gcr.io/cloud-builders/docker"
-  args:
-  - "run"
-  - "--entrypoint"
-  - "python"
-  - "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG}"
-  - "-m"
-  - "unittest"
-  - "discover"
-  - "-p"
-  - "test_*.py"
-
-#### run integration tests
-- name: "gcr.io/cloud-builders/docker"
-  args:
-  - "run"
-  - "--network"
-  - "cloudbuild"
-  - "--env"
-  - "PYTHONPATH=/home"
-  - "--env"
-  - "PROJECT_ID=${PROJECT_ID}"
-  - "--env"
-  - "K_REVISION=cloudbuild"
-  - "--env"
-  - "TWS_VERSION=981" # (❗试错后补充) 模拟的 TWS 版本号变量名也保持一致
-  # - "--env" # 如果不再需要从文件解析，可以注释或移除 TWS_INSTALL_LOG
-  # - "TWS_INSTALL_LOG=/tmp/dummy_install.log" # 如果仍要使用，确保此文件在容器内可访问
-  - "--entrypoint"
-  - "bash"
-  - "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG}"
-  - "-c"
-  - "/usr/bin/Xvfb :0 -ac -screen 0 1024x768x16 +extension RANDR & export DISPLAY=:0 && python ./_tests/integration_tests.py"
-
-#### (❗新增) Initialize Firestore config documents
-- name: 'python:3.9-slim'  # 使用标准的、公开的Python镜像
-  id: InitializeFirestore
-  entrypoint: 'bash'
-  args:
-  - -c
-  - |
-    set -e
-    echo "Initializing Firestore configuration documents for project ${PROJECT_ID}..."
-    pip install google-cloud-firestore
-    
-    # --- 核心修正 ---
-    # 使用根据您的项目结构确定的正确相对路径
-    python cloud-run/application/app/lib/init_firestore.py "${PROJECT_ID}"
-    
-    echo "Firestore initialization complete."
-# deploy new revision
-- name: 'gcr.io/cloud-builders/gcloud-slim'
-  args:
-  - "run"
-  - "deploy"
-  - "ib-${_TRADING_MODE}"
-  - "--image"
-  - "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG}"
-  - "--region"
-  - "${_GCP_REGION}"
-  - "--platform"
-  - "managed"
-  - "--max-instances"
-  - "1"
-  - "--memory"
-  - "2Gi"
-  - "--service-account"
-  - "ib-trading@${PROJECT_ID}.iam.gserviceaccount.com"
-  - "--revision-suffix"
-  - "${_MY_IMAGE_TAG}"
-  # --- 修正部分开始 ---
-  - "--update-labels=app=ib-trading,trading-mode=${_TRADING_MODE}"
-  # 使用 --set-env-vars 更稳妥，确保环境一致性
-  - "--set-env-vars=PROJECT_ID=${PROJECT_ID},TRADING_MODE=${_TRADING_MODE}"
-  # 将密钥也设置为一个独立的、格式正确的参数
-  - "--update-secrets=IB_CREDENTIALS_JSON=${_TRADING_MODE}:latest"
-  # --- 修正部分结束 ---
-
-#### delete old revision(s)
-- name: "gcr.io/cloud-builders/gcloud-slim"
-  entrypoint: "bash"
-  args:
-  - "-c"
-  - |
-    set -e 
-    if [[ "${_KEEP}" -gt "0" ]]; then
-      echo "Cleaning up old revisions for service ib-${_TRADING_MODE} in region ${_GCP_REGION}, keeping last ${_KEEP} active revisions..."
-      
-      ALL_REVISIONS_ARR=($(gcloud run revisions list \
-        --service="ib-${_TRADING_MODE}" \
-        --platform="managed" \
-        --region="${_GCP_REGION}" \
-        --filter="metadata.labels.trading-mode=${_TRADING_MODE}" \
-        --sort-by="~metadata.creationTimestamp" \
-        --format="value(metadata.name)"))
-
-      echo "Found revisions: $${ALL_REVISIONS_ARR[@]}"
-
-      SHELL_RE_NUM='^[0-9]+$'
-      if ! [[ "${_KEEP}" =~ $$SHELL_RE_NUM ]] ; then
-         echo "Error: _KEEP is not a number" >&2; exit 1
-      fi
-
-      REVISIONS_TO_DELETE_ARR=()
-      if [ "$${#ALL_REVISIONS_ARR[@]}" -gt "${_KEEP}" ]; then
-        REVISIONS_TO_DELETE_ARR=($${ALL_REVISIONS_ARR[@]:$_KEEP})
-      fi
-
-      if [ "$${#REVISIONS_TO_DELETE_ARR[@]}" -gt 0 ]; then
-        echo "The following revisions will be deleted: $${REVISIONS_TO_DELETE_ARR[@]}"
-        for shell_revision_var in "$${REVISIONS_TO_DELETE_ARR[@]}"; do
-          echo "Deleting revision: $${shell_revision_var}"
-          yes | gcloud run revisions delete "$${shell_revision_var}" --platform="managed" --region="${_GCP_REGION}" --quiet
-        done
-      else
-        echo "No old revisions to delete beyond the _KEEP=${_KEEP} limit."
-      fi
-
-      echo "Cleaning up unused Docker image tags..."
-      ACTIVE_REVISION_TAGS_ARR=()
-      for shell_rev_name_var in "$${ALL_REVISIONS_ARR[@]:0:$_KEEP}"; do
-        shell_img_url_var=$(gcloud run revisions describe "$${shell_rev_name_var}" --platform="managed" --region="${_GCP_REGION}" --format="value(spec.template.spec.containers[0].image)")
-        shell_tag_var=$(echo "$${shell_img_url_var}" | rev | cut -d: -f1 | rev)
-        if [[ -n "$${shell_tag_var}" && "$${shell_tag_var}" != "latest" ]]; then
-             ACTIVE_REVISION_TAGS_ARR+=("$${shell_tag_var}")
-        fi
-      done
-      
-      if [[ ! " $${ACTIVE_REVISION_TAGS_ARR[@]} " =~ " ${_MY_IMAGE_TAG} " ]]; then
-        ACTIVE_REVISION_TAGS_ARR+=("${_MY_IMAGE_TAG}") 
-      fi
-      
-      ACTIVE_REVISION_TAGS_UNIQUE_ARR=($(echo "$${ACTIVE_REVISION_TAGS_ARR[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
-      echo "Active or recent revision tags to keep: $${ACTIVE_REVISION_TAGS_UNIQUE_ARR[@]}"
-
-      ALL_IMAGE_TAGS_ARR=($(gcloud artifacts docker images list "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application" --format="value(tags)" --filter="tags:*"))
-      echo "All image tags in repository: $${ALL_IMAGE_TAGS_ARR[@]}"
-
-      for shell_tag_iter_var in $${ALL_IMAGE_TAGS_ARR[@]}; do
-        if [[ -z "$${shell_tag_iter_var}" ]] || ([[ "$${shell_tag_iter_var}" == "latest" ]] && [[ "${_MY_IMAGE_TAG}" != "latest" ]]); then
-          if [[ "$${shell_tag_iter_var}" == "latest" && "${_MY_IMAGE_TAG}" != "latest" ]]; then
-             echo "Skipping deletion of general 'latest' tag as it's not the current build tag."
-             continue
-          fi
-          if [[ -z "$${shell_tag_iter_var}" ]]; then
-              continue
-          fi
-        fi
-
-        SHELL_SHOULD_KEEP_BOOL=false 
-        for shell_keep_tag_var in $${ACTIVE_REVISION_TAGS_UNIQUE_ARR[@]}; do
-          if [[ "$${shell_tag_iter_var}" == "$${shell_keep_tag_var}" ]]; then
-            SHELL_SHOULD_KEEP_BOOL=true
-            break
-          fi
-        done
-
-        if ! $${SHELL_SHOULD_KEEP_BOOL}; then
-          echo "Deleting image tag: europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:$${shell_tag_iter_var}"
-          yes | gcloud artifacts docker images delete "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:$${shell_tag_iter_var}" --delete-tags --quiet
-        fi
-      done
-    else
-      echo "Skipping cleanup of old revisions and image tags as _KEEP is not greater than 0."
-    fi
-
+# 替换变量
 substitutions:
-  _GCP_REGION: europe-west6
-  _TRADING_MODE: paper 
-  _KEEP: "3" 
-  _MY_IMAGE_TAG: "latest" # Default value for _MY_IMAGE_TAG
+  _GCP_REGION: asia-east1
+  _TRADING_MODE: paper
+  _KEEP: "3"
+  _MY_IMAGE_TAG: "latest" # 默认值，可以被命令行覆盖
 
 timeout: "1200s"

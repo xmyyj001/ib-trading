@@ -1,11 +1,28 @@
+# ===================================================================
+# == CORRECTED VERSION: cloud-run/base/cloudbuild.yaml
+# ===================================================================
+
 steps:
-#### build and push Docker image
-- name: "gcr.io/cloud-builders/gcloud-slim"
+- name: 'gcr.io/cloud-builders/docker'
+  id: 'Build and Push Base Image'
   args:
-  - "builds"
-  - "submit"
-  - "--tag"
-  - "eu.gcr.io/${PROJECT_ID}/cloud-run/base:${SHORT_SHA}"
-  - "cloud-run/base/"
-  - "--gcs-source-staging-dir"
-  - "gs://${PROJECT_ID}-cloudbuild/source"
+    - 'build'
+    # 标签1: 使用 'latest' 标签，供 application Dockerfile 使用
+    - '--tag'
+    - 'europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/base:latest'
+    # 标签2 (可选，但推荐): 使用 Git 提交哈希作为唯一版本标签
+    - '--tag'
+    - 'europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/base:${SHORT_SHA}'
+    # 指定 Dockerfile 的上下文路径
+    - 'cloud-run/base'
+    - '--file'
+    - 'cloud-run/base/Dockerfile'
+
+# 定义要推送到仓库的镜像列表
+# Cloud Build 会自动推送这里列出的所有镜像
+images:
+- 'europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/base:latest'
+- 'europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/base:${SHORT_SHA}'
+
+# 超时设置
+timeout: '1200s'
