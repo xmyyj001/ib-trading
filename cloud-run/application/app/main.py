@@ -1,9 +1,16 @@
+# ===================================================================
+# == FINAL, COMPLETE main.py
+# ===================================================================
+
 from datetime import datetime
 import falcon
 import json
 import logging
 from os import environ, listdir
 import re
+
+# --- 1. 导入 ib_insync.util ---
+from ib_insync import util
 
 from intents.allocation import Allocation
 from intents.cash_balancer import CashBalancer
@@ -13,6 +20,14 @@ from intents.intent import Intent
 from intents.summary import Summary
 from intents.trade_reconciliation import TradeReconciliation
 from lib.environment import Environment
+
+# --- 2. 在所有代码的最开始，打上 asyncio 补丁 ---
+# 这是解决所有运行时事件循环问题的关键，它必须在任何 ib_insync 代码被调用之前执行。
+util.patchAsyncio()
+logging.info("Asyncio patched for ib_insync.")
+
+
+# --- 您现有的、健壮的代码逻辑 (保持原样) ---
 
 # get environment variables
 TRADING_MODE = environ.get('TRADING_MODE', 'paper')
@@ -37,8 +52,6 @@ env = {
     ['ibcIni', 'ibcPath', 'javaPath', 'twsPath', 'twsSettingsPath']
 }
 # env['javaPath'] += f"/{listdir(env['javaPath'])[0]}/bin"
-
-# --- 主要修改区域开始 ---
 
 # 优先从环境变量获取 TWS 版本号，这是最可靠的方式
 tws_version = environ.get('TWS_VERSION')
@@ -82,8 +95,8 @@ ibc_config = {
     'twsVersion': tws_version,
     **env
 }
-# --- 主要修改区域结束 ---
 
+# 实例化 Environment，这将触发所有初始化，包括凭据获取和 IBGW 实例化
 Environment(TRADING_MODE, ibc_config)
 
 
@@ -119,6 +132,8 @@ class Main:
             result = intent_instance.run()
             response.status = falcon.HTTP_200
         except Exception as e:
+            # 打印完整的 traceback 以便调试
+            logging.exception("An error occurred while processing the intent:")
             error_str = f'{e.__class__.__name__}: {e}'
             result = {'error': error_str}
             response.status = falcon.HTTP_500
@@ -131,13 +146,3 @@ class Main:
 # instantiante Falcon App and define route for intent
 app = falcon.App()
 app.add_route('/{intent}', Main())
-
-# 主要修改点
-# 分离正则表达式搜索：我不再将 re.search(...) 和 .group(1) 写在同一行。而是先执行搜索，并将结果（可能是匹配对象，也可能是 None）保存在 match 变量中。
-# 添加检查和错误处理：在尝试访问 .group(1) 之前，我添加了一个 if not match: 的检查。如果 re.search 没有找到匹配项（返回 None），代码现在会主动抛出一个 ValueError。
-# 更清晰的错误信息：这个新的 ValueError 包含一个非常详细的错误信息，它会告诉你：
-# 问题是找不到版本号。
-# 它期望的格式是什么。
-# 它查看的日志文件的实际内容是什么。
-# 这样，如果将来你的基础镜像或环境配置发生变化导致日志内容改变，你会立刻得到一个有用的错误信息，而不是一个令人困惑的 AttributeError。
-# 安全地构建配置：只有在检查通过后，代码才会从 match 对象中提取版本号，并用它来安全地构建 ibc_config 字典。
