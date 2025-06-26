@@ -170,5 +170,12 @@ gcloud run services logs read ib-paper --region asia-east1 --limit 100
 
 # 4.出现问题删除cloud-run 
 gcloud run services delete ib-paper --region asia-east1
+
+# 5.进入镜像当中查找内部的文件，确认状态：docker run -it --entrypoint /bin/bash [YOUR_FULL_IMAGE_NAME]
+#将 [YOUR_FULL_IMAGE_NAME] 替换为您上一步复制的镜像名。
+docker run -it --entrypoint /bin/bash europe-docker.pkg.dev/gold-gearbox-424413-k1/cloud-run-repo/application:latest
+
+# 查找文件，它会在整个容器文件系统中搜索 ibgateway.vmoptions 文件。
+find / -name "ibgateway.vmoptions"
 ```
 

@@ -1,9 +1,10 @@
 # ===================================================================
 # == RECOMMENDED VERSION: cloud-run/application/cloudbuild.yaml
+# == WITH INTEGRATED TESTING AND CHECKS
 # ===================================================================
 
 steps:
-  # 步骤 1: 拉取最新的 base 镜像，确保我们基于最新的依赖进行构建
+  # 步骤 1: 拉取最新的 base 镜像
   - name: 'gcr.io/cloud-builders/docker'
     id: 'Pull-Latest-Base'
     args: ['pull', 'europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/base:latest']
@@ -17,7 +18,7 @@ steps:
       - 'BASE_IMAGE_URL=europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/base:latest'
       - '--tag'
       - 'europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG}'
-      - 'cloud-run/application' # Dockerfile 上下文
+      - 'cloud-run/application'
       - '--file'
       - 'cloud-run/application/Dockerfile'
     waitFor: ['Pull-Latest-Base']
@@ -28,11 +29,63 @@ steps:
     args: ['push', 'europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG}']
     waitFor: ['Build-Application']
 
-  # 步骤 4: 运行测试 (如果需要，这里是放置测试步骤的地方)
-  # ... 你的单元测试和集成测试步骤可以放在这里，引用刚构建的镜像 ...
+  # --- 新增的检测和初始化步骤 ---
 
-  # 步骤 5: 部署到 Cloud Run
-  - name: 'gcr.io/cloud-builders/gcloud' # 使用完整的 gcloud 镜像更稳妥
+  # 步骤 4: 运行依赖安全检查
+  - name: "gcr.io/cloud-builders/docker"
+    id: "Safety-Check"
+    entrypoint: "bash"
+    args:
+    - "-c"
+    - "docker run --rm europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG} bash -c 'pip install safety && safety check --bare'"
+    # 注意：我移除了 '|| true'，如果发现漏洞，构建将失败。如果想改为警告，请加回 '|| true'
+    waitFor: ['Push-Application']
+
+  # 步骤 5: 运行单元测试
+  - name: "gcr.io/cloud-builders/docker"
+    id: "Unit-Tests"
+    entrypoint: "bash"
+    args:
+    - "-c"
+    - "docker run --rm --entrypoint python europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG} -m unittest discover -p \"test_*.py\""
+    waitFor: ['Push-Application']
+
+  # 步骤 6: 初始化 Firestore 配置
+  - name: 'python:3.9-slim'
+    id: "Initialize-Firestore"
+    entrypoint: 'bash'
+    args:
+    - -c
+    - |
+      set -e
+      echo "Initializing Firestore configuration for project ${PROJECT_ID}..."
+      pip install --quiet google-cloud-firestore
+      python cloud-run/application/app/lib/init_firestore.py "${PROJECT_ID}"
+      echo "Firestore initialization complete."
+    # 这个步骤可以独立进行，但放在集成测试前确保环境就绪
+    waitFor: ['Push-Application']
+
+  # 步骤 7: 运行集成测试
+  - name: "gcr.io/cloud-builders/docker"
+    id: "Integration-Tests"
+    entrypoint: "bash"
+    args:
+    - "-c"
+    - |
+      docker run --rm \
+        --env "PYTHONPATH=/home" \
+        --env "PROJECT_ID=${PROJECT_ID}" \
+        --env "TRADING_MODE=${_TRADING_MODE}" \
+        --env "K_REVISION=cloudbuild" \
+        --entrypoint bash \
+        europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG} \
+        -c "/usr/bin/Xvfb :0 -ac -screen 0 1024x768x16 +extension RANDR & export DISPLAY=:0 && python ./_tests/integration_tests.py"
+    waitFor: ['Initialize-Firestore'] # 确保在 Firestore 初始化后运行
+
+  # --- 检测结束 ---
+
+  # 步骤 8: 部署到 Cloud Run (只有在所有检查都通过后才会执行)
+  - name: 'gcr.io/cloud-builders/gcloud'
     id: 'Deploy-to-Cloud-Run'
     args:
       - 'run'
@@ -52,18 +105,17 @@ steps:
       - '2'
       - '--service-account'
       - 'ib-trading@${PROJECT_ID}.iam.gserviceaccount.com'
-      - '--no-allow-unauthenticated' 
+      - '--no-allow-unauthenticated' # 确保服务是私有的
       - '--set-env-vars=PROJECT_ID=${PROJECT_ID},TRADING_MODE=${_TRADING_MODE}'
-      - '--update-secrets=IB_CREDENTIALS_JSON=${_TRADING_MODE}:latest'
-    # 确保在推送镜像之后再部署
-    waitFor: ['Push-Application']
-
-  # ... 你的清理步骤可以保留在这里 ...
+    waitFor:
+      - 'Safety-Check'
+      - 'Unit-Tests'
+      - 'Integration-Tests'
 
 # 替换变量
 substitutions:
   _GCP_REGION: asia-east1
   _TRADING_MODE: paper
-  _MY_IMAGE_TAG: "latest" # 默认值，可以被命令行覆盖
+  _MY_IMAGE_TAG: "latest"
 
-timeout: "1200s"
+timeout: "1800s" # 增加了超时时间以适应更多的测试步骤
