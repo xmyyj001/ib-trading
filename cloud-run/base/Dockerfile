@@ -1,5 +1,5 @@
 # ===================================================================
-# == SIMPLIFIED base/Dockerfile
+# == FINAL, COMPLETE base/Dockerfile
 # ===================================================================
 FROM python:3.9-slim
 
@@ -9,9 +9,18 @@ ENV IBC_PATH=/opt/ibc
 ENV IBC_INI=${IBC_PATH}/config.ini
 ENV DISPLAY=:0
 
+# --- 关键修复：在 apt-get install 中添加 procps (包含 pgrep) 和 xterm ---
 RUN set -e && \
     apt-get update && \
-    apt-get install --no-install-recommends -y wget unzip xvfb libxtst6 libxrender1 openjdk-17-jre-headless && \
+    apt-get install --no-install-recommends -y \
+        wget \
+        unzip \
+        xvfb \
+        libxtst6 \
+        libxrender1 \
+        openjdk-17-jre-headless \
+        procps \
+        xterm && \
     mkdir -p "${TWS_PATH}" "${IBC_PATH}" && \
     wget -q -O /tmp/ibgw.sh https://download2.interactivebrokers.com/installers/ibgateway/stable-standalone/ibgateway-stable-standalone-linux-x64.sh && \
     chmod +x /tmp/ibgw.sh && \
@@ -29,4 +38,4 @@ RUN set -e && \
 COPY ibc/config.ini ${IBC_INI}
 COPY ibc/jts.ini "${TWS_PATH}/${TWS_VERSION}/jts.ini"
 
-# 不再需要 WORKDIR, COPY cmd.sh, RUN chmod, 或 CMD
+# 这个基础镜像本身不运行任何应用，所以没有 CMD
