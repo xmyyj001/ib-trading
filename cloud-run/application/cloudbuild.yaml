@@ -1,6 +1,5 @@
 # ===================================================================
-# == RECOMMENDED VERSION: cloud-run/application/cloudbuild.yaml
-# == WITH INTEGRATED TESTING AND CHECKS
+# == FINAL CORRECTED: cloud-run/application/cloudbuild.yaml
 # ===================================================================
 
 steps:
@@ -29,42 +28,41 @@ steps:
     args: ['push', 'europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG}']
     waitFor: ['Build-Application']
 
-  # --- 新增的检测和初始化步骤 ---
+  # --- 检测和初始化步骤 ---
 
-  # 步骤 4: 运行依赖安全检查
+  # 步骤 4: 运行依赖安全检查 (优化后)
   - name: "gcr.io/cloud-builders/docker"
     id: "Safety-Check"
-    entrypoint: "bash"
     args:
-    - "-c"
-    - "docker run --rm europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG} bash -c 'pip install safety && safety check --bare'"
-    # 注意：我移除了 '|| true'，如果发现漏洞，构建将失败。如果想改为警告，请加回 '|| true'
+      - "run"
+      - "--rm"
+      - "--entrypoint"
+      - "bash"
+      - "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG}"
+      - "-c"
+      - "pip install --quiet safety && safety check --bare"
     waitFor: ['Push-Application']
 
-# ... (其他步骤) ...
-
-  # 步骤 5: 运行单元测试
-  - name: "gcr.io/cloud-builders/docker"
+  # 步骤 5: 运行单元测试 (已修复)
+  - name: "gcr.io/cloud-builders/gcloud" # <--- 关键修复：使用 gcloud builder
     id: "Unit-Tests"
     entrypoint: "bash"
     args:
     - "-c"
     - |
-      # 登录 gcloud CLI 以获取应用默认凭据 (ADC)
-      gcloud auth application-default login
-      
-      # 运行容器，并将 ADC 挂载进去
       docker run --rm \
-        --volume /root/.config/gcloud:/root/.config/gcloud \
-        --env "GOOGLE_APPLICATION_CREDENTIALS=/root/.config/gcloud/application_default_credentials.json" \
         --env "PROJECT_ID=${PROJECT_ID}" \
         --env "TRADING_MODE=${_TRADING_MODE}" \
+        --env "GOOGLE_APPLICATION_CREDENTIALS=/gcloud-credentials/application_default_credentials.json" \
+        -v "gcloud-config:/gcloud-credentials" \
         --entrypoint python \
         europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG} \
         -m unittest discover -p "test_*.py"
+    volumes:
+      - name: 'gcloud-config'
+        path: '/gcloud-credentials'
     waitFor: ['Push-Application']
 
-# ... (其他步骤) ...
 
   # 步骤 6: 初始化 Firestore 配置
   - name: 'python:3.9-slim'
@@ -74,15 +72,12 @@ steps:
     - -c
     - |
       set -e
-      echo "Initializing Firestore configuration for project ${PROJECT_ID}..."
       pip install --quiet google-cloud-firestore
       python cloud-run/application/app/lib/init_firestore.py "${PROJECT_ID}"
-      echo "Firestore initialization complete."
-    # 这个步骤可以独立进行，但放在集成测试前确保环境就绪
     waitFor: ['Push-Application']
 
-  # 步骤 7: 运行集成测试
-  - name: "gcr.io/cloud-builders/docker"
+  # 步骤 7: 运行集成测试 (已修复)
+  - name: "gcr.io/cloud-builders/gcloud" # <--- 关键修复：使用 gcloud builder
     id: "Integration-Tests"
     entrypoint: "bash"
     args:
@@ -93,14 +88,19 @@ steps:
         --env "PROJECT_ID=${PROJECT_ID}" \
         --env "TRADING_MODE=${_TRADING_MODE}" \
         --env "K_REVISION=cloudbuild" \
+        --env "GOOGLE_APPLICATION_CREDENTIALS=/gcloud-credentials/application_default_credentials.json" \
+        -v "gcloud-config:/gcloud-credentials" \
         --entrypoint bash \
         europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG} \
         -c "/usr/bin/Xvfb :0 -ac -screen 0 1024x768x16 +extension RANDR & export DISPLAY=:0 && python ./_tests/integration_tests.py"
-    waitFor: ['Initialize-Firestore'] # 确保在 Firestore 初始化后运行
+    volumes:
+      - name: 'gcloud-config'
+        path: '/gcloud-credentials'
+    waitFor: ['Initialize-Firestore']
 
-  # --- 检测结束 ---
+  # --- 部署步骤 ---
 
-  # 步骤 8: 部署到 Cloud Run (只有在所有检查都通过后才会执行)
+  # 步骤 8: 部署到 Cloud Run
   - name: 'gcr.io/cloud-builders/gcloud'
     id: 'Deploy-to-Cloud-Run'
     args:
@@ -121,7 +121,7 @@ steps:
       - '2'
       - '--service-account'
       - 'ib-trading@${PROJECT_ID}.iam.gserviceaccount.com'
-      - '--no-allow-unauthenticated' # 确保服务是私有的
+      - '--no-allow-unauthenticated'
       - '--set-env-vars=PROJECT_ID=${PROJECT_ID},TRADING_MODE=${_TRADING_MODE}'
     waitFor:
       - 'Safety-Check'
@@ -134,4 +134,4 @@ substitutions:
   _TRADING_MODE: paper
   _MY_IMAGE_TAG: "latest"
 
-timeout: "1800s" # 增加了超时时间以适应更多的测试步骤
+timeout: "1800s"
