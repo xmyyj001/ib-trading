@@ -179,17 +179,18 @@ graph TD
             .
         ```
         请确保 `_TRADING_MODE` 和 `_GCP_REGION` 的值与你的需求一致。 -->
-
+        
         ```bash 
-        cd ~/ib-trading
-        
+        cd ~/ib-trading       
         GIT_TAG=$(git rev-parse --short HEAD)
-        
         then:
-        
         gcloud builds submit --config cloud-run/application/cloudbuild.yaml \
         --substitutions=_TRADING_MODE=paper,_GCP_REGION=asia-east1,_MY_IMAGE_TAG=${GIT_TAG:-manual-latest} .
         ```
+
+    *   部署命令：
+        gcloud builds submit --config cloud-run/application/cloudbuild.yaml .
+
 7.  **验证 Cloud Run 服务**
     *   部署完成后，你可以在 Google Cloud Console 的 Cloud Run 页面查看你的服务状态。
     *   服务名称将是 `ib-paper` (如果 `_TRADING_MODE` 是 `paper`)。
