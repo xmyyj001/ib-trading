@@ -41,14 +41,30 @@ steps:
     # 注意：我移除了 '|| true'，如果发现漏洞，构建将失败。如果想改为警告，请加回 '|| true'
     waitFor: ['Push-Application']
 
+# ... (其他步骤) ...
+
   # 步骤 5: 运行单元测试
   - name: "gcr.io/cloud-builders/docker"
     id: "Unit-Tests"
     entrypoint: "bash"
     args:
     - "-c"
-    - "docker run --rm --entrypoint python europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG} -m unittest discover -p \"test_*.py\""
+    - |
+      # 登录 gcloud CLI 以获取应用默认凭据 (ADC)
+      gcloud auth application-default login
+      
+      # 运行容器，并将 ADC 挂载进去
+      docker run --rm \
+        --volume /root/.config/gcloud:/root/.config/gcloud \
+        --env "GOOGLE_APPLICATION_CREDENTIALS=/root/.config/gcloud/application_default_credentials.json" \
+        --env "PROJECT_ID=${PROJECT_ID}" \
+        --env "TRADING_MODE=${_TRADING_MODE}" \
+        --entrypoint python \
+        europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG} \
+        -m unittest discover -p "test_*.py"
     waitFor: ['Push-Application']
+
+# ... (其他步骤) ...
 
   # 步骤 6: 初始化 Firestore 配置
   - name: 'python:3.9-slim'
