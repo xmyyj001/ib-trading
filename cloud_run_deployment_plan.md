@@ -91,6 +91,16 @@ graph TD
             --role "roles/secretmanager.secretAccessor"
         ```
         你可能还需要根据应用程序的需求授予其他权限，例如访问 Pub/Sub。
+    
+    以下授予 Cloud Run Invoker 角色：
+
+    *   如果您想使用当前登录的 Cloud Shell 用户账号来测试访问，请运行以下命令：
+        ```bash
+        gcloud run services add-iam-policy-binding ib-paper \
+            --member="user:xmyyj001@gmail.com" \
+            --role="roles/run.invoker" \
+            --region="asia-east1"
+        ```
 
 2.  **创建并配置 Google Secret Manager Secrets**
     *   为了安全地存储 IB Gateway 的用户名和密码，建议使用 Google Secret Manager。
@@ -111,53 +121,33 @@ graph TD
         ```
 
 3.  **修改应用程序代码以读取 Secret Manager 凭据**
-    *   应用程序的 Python 代码（可能在 [`cloud-run/application/app/lib/environment.py`](cloud-run/application/app/lib/environment.py) 或 [`cloud-run/application/app/lib/ibgw.py`](cloud-run/application/app/lib/ibgw.py) 中）需要被修改以读取 `IB_USERNAME` 和 `IB_PASSWORD` 环境变量，并将其用于 IBC 配置。
-    *   具体修改可能涉及：
-        *   在 `lib/environment.py` 或 `lib/ibgw.py` 中添加代码，从 `os.environ` 读取 `IB_USERNAME` 和 `IB_PASSWORD`。
-        *   将这些值传递给 IBC 配置，例如更新 `ibc_config` 字典。
-    *   **注意：** 这部分修改将在切换到 `code` 模式后进行。
+    *   确认应用程序代码直接从 Secret Manager 读取凭据
+    *   应用程序的 Python 代码 (在 lib/environment.py 中) 已被修改，不再依赖于环境变量或挂载的文件来获取凭据。
+    *   它现在使用 google-cloud-secret-manager 客户端库，在应用程序启动时，主动调用 Google Cloud API，直接从 Secret Manager 中获取名为 ib-gateway-username 和 ib-gateway-password 的密钥。
+    *   这个方法是云原生的最佳实践，安全且与自动化流程解耦。
+
 
 4.  **构建基础镜像 (`cloud-run/base`)**
     *   进入 `cloud-run/base` 目录：
         ```bash
-        cd cloud-run/base
+            # 确保你已创建了 Artifact Registry 仓库
+            gcloud artifacts repositories create cloud-run-repo \
+                --repository-format=docker \
+                --location=europe \
+                --description="Docker repository for Cloud Run applications"
+
+            # 配置 Docker 认证
+            gcloud auth configure-docker europe-docker.pkg.dev
+
+            # 进入 base 目录
+            cd cloud-run/base
+
+            # 构建并标记镜像
+            docker build -t europe-docker.pkg.dev/[YOUR_PROJECT_ID]/cloud-run-repo/base:latest .
+
+            # 推送镜像
+            docker push europe-docker.pkg.dev/[YOUR_PROJECT_ID]/cloud-run-repo/base:latest
         ```
-    *   构建 Docker 镜像：
-        ```bash
-        docker build -t eu.gcr.io/[YOUR_PROJECT_ID]/cloud-run/base:latest .
-        ```
-        你可以选择一个有意义的标签，例如 `latest` 或一个版本号。
-    *   推送镜像到 Google Container Registry (GCR)：
-        ```bash
-        docker push eu.gcr.io/[YOUR_PROJECT_ID]/cloud-run/base:latest
-        ```
-    *   返回项目根目录：
-        ```bash
-        cd ../..
-        ```
-
-    **修正：创建 Artifact Registry 仓库：**
-
-    ```
-    gcloud artifacts repositories create cloud-run-repo \
-        --repository-format=docker \
-        --location=europe \
-        --description="Docker repository for Cloud Run applications"
-    ```
-
-
-    请注意，cloudbuild.yaml 中使用了 europe-docker.pkg.dev，因此仓库位置必须是 europe。
-
-    配置 Docker 认证：
-
-    ```
-    gcloud auth configure-docker europe-docker.pkg.dev
-    ```
-
-
-    这将配置 Docker 客户端以使用您的 Google Cloud 凭据向 Artifact Registry 进行身份验证。
-
-以上几个步骤是在建立触发器之前要先运行的？。
 
 
 5.  **配置 Cloud Build 触发器**
@@ -199,7 +189,7 @@ graph TD
     *   服务名称将是 `ib-paper` (如果 `_TRADING_MODE` 是 `paper`)。
     *   确认服务状态为 "Ready"。
 
-8.  **配置 Cloud Run 环境变量和 Secrets**
+<!-- 8.  **配置 Cloud Run 环境变量和 Secrets**
     *   部署后，你需要更新 Cloud Run 服务以从 Secret Manager 访问 IB Gateway 凭据。
     *   使用以下命令更新服务，将 Secret 挂载为环境变量：
         ```bash
@@ -208,7 +198,9 @@ graph TD
             --update-secrets=IB_CREDENTIALS_JSON=paper:latest \
             --set-env-vars=TRADING_MODE=paper # 确保 TRADING_MODE 也被设置
         ```
-        将 `asia-east1` 替换为你的部署区域。
+        将 `asia-east1` 替换为你的部署区域。 
+        此步骤可能产生问题：
+        -->
 
 9.  **测试应用程序**
     *   Cloud Run 服务会有一个 URL。你可以通过访问该 URL 来测试你的应用程序。
@@ -240,12 +232,10 @@ graph TD
         
         ```bash
         gcloud run services add-iam-policy-binding ib-paper \
-            --member="user:[YOUR_GCLOUD_EMAIL]" \
+            --member="user:xmyyj001@gmail.com" \
             --role="roles/run.invoker" \
             --region="asia-east1"
         ```
-
-    将 [YOUR_GCLOUD_EMAIL] 替换为您的 Google Cloud 账号邮箱地址。
 
     *   使用身份验证的 curl 请求测试：
 

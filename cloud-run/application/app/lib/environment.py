@@ -4,6 +4,9 @@ from ib_insync import util
 import logging
 from os import environ
 
+# --- 1. 导入 Secret Manager 客户端库 ---
+from google.cloud import secretmanager
+
 from lib.gcp import GcpModule
 from lib.ibgw import IBGW
 
@@ -15,52 +18,65 @@ class Environment:
 
         ACCOUNT_VALUE_TIMEOUT = 60
         ENV_VARS = ['K_REVISION', 'PROJECT_ID']
-        SECRET_RESOURCE = 'projects/{}/secrets/{}/versions/latest'
+        # SECRET_RESOURCE 不再需要，因为我们直接构建密钥名称
+        # SECRET_RESOURCE = 'projects/{}/secrets/{}/versions/latest'
 
         def __init__(self, trading_mode, ibc_config):
             self._env = {k: v for k, v in environ.items() if k in self.ENV_VARS}
             self._trading_mode = trading_mode
-            # get secrets and update config
-            # get secrets and update config
-            secrets = {}
-            if 'IB_CREDENTIALS_JSON' in environ:
-                try:
-                    credentials = json.loads(environ.get('IB_CREDENTIALS_JSON'))
-                    secrets['userid'] = credentials.get('userid')
-                    secrets['password'] = credentials.get('password')
-                except json.JSONDecodeError:
-                    self._logging.critical("Failed to decode IB_CREDENTIALS_JSON environment variable.")
-                    raise ValueError("Environment configuration could not be loaded due to invalid JSON.")
-            elif 'IB_USERNAME' in environ and 'IB_PASSWORD' in environ:
-                secrets['userid'] = environ.get('IB_USERNAME')  # 修复拼写错误
-                secrets['password'] = environ.get('IB_PASSWORD')
-            else:
-                secrets = self.get_secret(self.SECRET_RESOURCE.format(self._env['PROJECT_ID'], self._trading_mode))
 
-            if secrets is None:
-                self._logging.critical("Failed to load environment variables from secret manager. They were None.")
-                raise ValueError("Environment configuration could not be loaded.")
-            
+            # --- 2. 全新的凭据获取逻辑 ---
+            # 此代码块替换了原来复杂的 if/elif/else 结构
+            self._logging.info("Fetching credentials directly from Google Secret Manager...")
+            secrets = {}
+            try:
+                # 初始化客户端
+                client = secretmanager.SecretManagerServiceClient()
+                project_id = self._env['PROJECT_ID']
+
+                # 根据您的部署计划，构建两个密钥的完整资源名称
+                username_secret_name = f"projects/{project_id}/secrets/ib-gateway-username/versions/latest"
+                password_secret_name = f"projects/{project_id}/secrets/ib-gateway-password/versions/latest"
+
+                # 获取用户名
+                username_response = client.access_secret_version(request={"name": username_secret_name})
+                username = username_response.payload.data.decode("UTF-8")
+
+                # 获取密码
+                password_response = client.access_secret_version(request={"name": password_secret_name})
+                password = password_response.payload.data.decode("UTF-8")
+
+                # IBC 库需要 'userid' 和 'password' 这两个键
+                secrets['userid'] = username
+                secrets['password'] = password
+                self._logging.info("Successfully fetched IB credentials from Secret Manager.")
+
+            except Exception as e:
+                # 如果获取失败，这是致命错误，必须记录并停止应用启动
+                self._logging.critical(f"FATAL: Could not fetch credentials from Secret Manager. Error: {e}")
+                raise ValueError("Failed to load IB credentials from Secret Manager.") from e
+            # --- 凭据获取逻辑结束 ---
+
+
             # 优先使用环境变量中的 TWS_PATH
             if 'TWS_PATH' in os.environ:
                 ibc_config['twsPath'] = os.environ['TWS_PATH']
 
+            # 将获取到的 secrets 合并到最终配置中
             config = {
                 **ibc_config,
                 'tradingMode': self._trading_mode,
                 **secrets
             }
 
-            # 确保关键路径是从环境变量中设置的，覆盖任何可能传入的 None 值。
-            # 这使得应用对配置错误更具弹性。
+            # 确保关键路径是从环境变量中设置的
             config['ibcPath'] = environ.get('IBC_PATH', config.get('ibcPath'))
             config['ibcIni'] = environ.get('IBC_INI', config.get('ibcIni'))
             config['twsPath'] = environ.get('TWS_PATH', config.get('twsPath'))
-            # --- 修正代码结束 ---
 
-            self._logging.debug({**config, 'password': 'xxx'})
+            self._logging.debug({**config, 'password': 'xxx'}) # 打印前隐藏密码
 
-            # query config
+            # query config from Firestore
             common_doc = self._db.document('config/common').get()
             mode_doc = self._db.document(f'config/{self._trading_mode}').get()
 
@@ -69,7 +85,6 @@ class Environment:
             if not mode_doc.exists:
                 raise ValueError(f"Critical configuration document 'config/{self._trading_mode}' not found in Firestore.")
 
-            # Now it's safe to call .to_dict()
             common_config = common_doc.to_dict()
             mode_config = mode_doc.to_dict()
 
@@ -77,11 +92,6 @@ class Environment:
                 **common_config,
                 **mode_config
             }
-            # self._config = {
-            #     **self._db.document('config/common').get().to_dict(),
-            #     **self._db.document(f'config/{self._trading_mode}').get().to_dict()
-            # }
-
 
             # instantiate IB Gateway
             self._ibgw = IBGW(config)

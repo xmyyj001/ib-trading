@@ -3,7 +3,9 @@
 # ===================================================================
 
 # 1. 从正确的、静态的 base 镜像地址开始
-FROM europe-docker.pkg.dev/gold-gearbox-424413-k1/cloud-run-repo/base:latest
+ARG BASE_IMAGE_URL=europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/base:latest
+
+FROM ${BASE_IMAGE_URL}
 
 # 2. 设置工作目录
 WORKDIR /home/app

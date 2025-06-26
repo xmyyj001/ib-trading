@@ -39,117 +39,86 @@ graph TD
 ## 一次性环境设置
 
 ### 3.1 登录gcloud并设置项目
-```bash
-# 登录gcloud CLI
-gcloud auth login
+        ```bash
+        # 登录gcloud CLI
+        gcloud auth login
 
-# 设置项目ID
-gcloud config set project gold-gearbox-424413-k1
-```
+        # 设置项目ID
+        gcloud config set project gold-gearbox-424413-k1
+        ```
 
-### 3.2 启用Google Cloud API
-```bash
-gcloud services enable \
-    cloudbuild.googleapis.com \
-    run.googleapis.com \
-    artifactregistry.googleapis.com \
-    iam.googleapis.com \
-    secretmanager.googleapis.com \
-    bigquery.googleapis.com \
-    firestore.googleapis.com \
-    --project=gold-gearbox-424413-k1
-```
+        ### 3.2 启用Google Cloud API
+        ```bash
+        gcloud services enable \
+            cloudbuild.googleapis.com \
+            run.googleapis.com \
+            artifactregistry.googleapis.com \
+            iam.googleapis.com \
+            secretmanager.googleapis.com \
+            bigquery.googleapis.com \
+            firestore.googleapis.com \
+            --project=gold-gearbox-424413-k1
+        ```
 
 ### 3.3 创建Cloud Run服务账号
-```bash
-PROJECT_ID="gold-gearbox-424413-k1"
-CR_SA_NAME="ib-trading"
-CR_SA_EMAIL="${CR_SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
+        ```bash
+        PROJECT_ID="gold-gearbox-424413-k1"
+        CR_SA_NAME="ib-trading"
+        CR_SA_EMAIL="${CR_SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
 
-# 创建服务账号（如果不存在）
-gcloud iam service-accounts describe "${CR_SA_EMAIL}" \
-    --project="${PROJECT_ID}" > /dev/null 2>&1 || \
-gcloud iam service-accounts create "${CR_SA_NAME}" \
-    --display-name="IB Trading Cloud Run Service Account" \
-    --project="${PROJECT_ID}"
+        # 创建服务账号（如果不存在）
+        gcloud iam service-accounts describe "${CR_SA_EMAIL}" \
+            --project="${PROJECT_ID}" > /dev/null 2>&1 || \
+        gcloud iam service-accounts create "${CR_SA_NAME}" \
+            --display-name="IB Trading Cloud Run Service Account" \
+            --project="${PROJECT_ID}"
 
-# 授予IAM角色
-gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
-    --member="serviceAccount:${CR_SA_EMAIL}" \
-    --role="roles/secretmanager.secretAccessor"
+        # 授予IAM角色
+        gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+            --member="serviceAccount:${CR_SA_EMAIL}" \
+            --role="roles/secretmanager.secretAccessor"
 
-gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
-    --member="serviceAccount:${CR_SA_EMAIL}" \
-    --role="roles/bigquery.user"
+        gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+            --member="serviceAccount:${CR_SA_EMAIL}" \
+            --role="roles/bigquery.user"
 
-gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
-    --member="serviceAccount:${CR_SA_EMAIL}" \
-    --role="roles/bigquery.dataEditor"
+        gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+            --member="serviceAccount:${CR_SA_EMAIL}" \
+            --role="roles/bigquery.dataEditor"
 
-gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
-    --member="serviceAccount:${CR_SA_EMAIL}" \
-    --role="roles/datastore.user"
-```
+        gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+            --member="serviceAccount:${CR_SA_EMAIL}" \
+            --role="roles/datastore.user"
+        ```
 
 ### 3.4 创建Artifact Registry仓库
-```bash
-PROJECT_ID="gold-gearbox-424413-k1"
-AR_LOCATION="europe"
+        ```bash
+        PROJECT_ID="gold-gearbox-424413-k1"
+        AR_LOCATION="europe"
 
-# 创建应用程序镜像仓库
-gcloud artifacts repositories describe cloud-run-repo \
-    --location="${AR_LOCATION}" \
-    --project="${PROJECT_ID}" > /dev/null 2>&1 || \
-gcloud artifacts repositories create cloud-run-repo \
-    --repository-format=docker \
-    --location="${AR_LOCATION}" \
-    --description="Docker repository for Cloud Run ib-trading application" \
-    --project="${PROJECT_ID}"
+        # 创建应用程序镜像仓库
+        gcloud artifacts repositories describe cloud-run-repo \
+            --location="${AR_LOCATION}" \
+            --project="${PROJECT_ID}" > /dev/null 2>&1 || \
+        gcloud artifacts repositories create cloud-run-repo \
+            --repository-format=docker \
+            --location="${AR_LOCATION}" \
+            --description="Docker repository for Cloud Run ib-trading application" \
+            --project="${PROJECT_ID}"
 
-# 创建基础镜像仓库
-gcloud artifacts repositories describe eu.gcr.io \
-    --location="${AR_LOCATION}" \
-    --project="${PROJECT_ID}" > /dev/null 2>&1 || \
-gcloud artifacts repositories create eu.gcr.io \
-    --repository-format=docker \
-    --location="${AR_LOCATION}" \
-    --description="Repository for base images, named eu.gcr.io" \
-    --project="${PROJECT_ID}"
-```
+        # 创建基础镜像仓库
+        gcloud artifacts repositories describe eu.gcr.io \
+            --location="${AR_LOCATION}" \
+            --project="${PROJECT_ID}" > /dev/null 2>&1 || \
+        gcloud artifacts repositories create eu.gcr.io \
+            --repository-format=docker \
+            --location="${AR_LOCATION}" \
+            --description="Repository for base images, named eu.gcr.io" \
+            --project="${PROJECT_ID}"
+        ```
 
 ### 3.5 构建基础镜像
-```bash
-# --- 1. 正确的变量定义 ---
-PROJECT_ID="gold-gearbox-424413-k1"
-AR_LOCATION="europe"
-# 你的 Artifact Registry 仓库名称
-AR_REPO_NAME="cloud-run-repo" 
-# 镜像在仓库中的路径/名称
-BASE_IMAGE_NAME="base"
-BASE_IMAGE_TAG="latest"
-# --- 2. 拼接正确的完整镜像名称 ---
-# 格式: <location>-docker.pkg.dev/<project-id>/<repo-name>/<image-name>:<tag>
-FULL_BASE_IMAGE_NAME="${AR_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO_NAME}/${BASE_IMAGE_NAME}:${BASE_IMAGE_TAG}"
 
-echo ">>> Target image name: ${FULL_BASE_IMAGE_NAME}"
-# --- 3. 配置Docker认证 ---
-echo ">>> Configuring Docker authentication..."
-gcloud auth configure-docker "${AR_LOCATION}-docker.pkg.dev" --project="${PROJECT_ID}"
-# --- 4. 构建并推送镜像 ---
-# 确保在正确的目录下执行
-cd ~/ib-trading/cloud-run/base
-echo ">>> Building image..."
-docker build -t "${FULL_BASE_IMAGE_NAME}" .
-echo ">>> Pushing image..."
-docker push "${FULL_BASE_IMAGE_NAME}"
-# 返回到项目根目录
-cd ~/ib-trading
-echo ">>> Base image push complete!"
-
-# --- 5. (可选但推荐) 验证推送是否成功 ---
-echo ">>> Verifying image in Artifact Registry..."
-gcloud artifacts docker images list "${AR_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO_NAME}/${BASE_IMAGE_NAME}" --include-tags
-```
 
 ### 3.6 创建BigQuery数据集
     ```bash

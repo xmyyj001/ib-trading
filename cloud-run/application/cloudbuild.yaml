@@ -13,6 +13,8 @@ steps:
     id: 'Build-Application'
     args:
       - 'build'
+      - '--build-arg'
+      - 'BASE_IMAGE_URL=europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/base:latest'
       - '--tag'
       - 'europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG}'
       - 'cloud-run/application' # Dockerfile 上下文
@@ -50,6 +52,7 @@ steps:
       - '2'
       - '--service-account'
       - 'ib-trading@${PROJECT_ID}.iam.gserviceaccount.com'
+      - '--no-allow-unauthenticated' 
       - '--set-env-vars=PROJECT_ID=${PROJECT_ID},TRADING_MODE=${_TRADING_MODE}'
       - '--update-secrets=IB_CREDENTIALS_JSON=${_TRADING_MODE}:latest'
     # 确保在推送镜像之后再部署
