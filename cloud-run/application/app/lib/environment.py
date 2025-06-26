@@ -4,7 +4,7 @@ from ib_insync import util
 import logging
 from os import environ
 
-# --- 1. 导入 Secret Manager 客户端库 ---
+# 导入 Secret Manager 客户端库
 from google.cloud import secretmanager
 
 from lib.gcp import GcpModule
@@ -18,42 +18,42 @@ class Environment:
 
         ACCOUNT_VALUE_TIMEOUT = 60
         ENV_VARS = ['K_REVISION', 'PROJECT_ID']
-        # SECRET_RESOURCE 不再需要，因为我们直接构建密钥名称
-        # SECRET_RESOURCE = 'projects/{}/secrets/{}/versions/latest'
 
         def __init__(self, trading_mode, ibc_config):
             self._env = {k: v for k, v in environ.items() if k in self.ENV_VARS}
             self._trading_mode = trading_mode
 
-            # --- 2. 全新的凭据获取逻辑 ---
-            # 此代码块替换了原来复杂的 if/elif/else 结构
-            self._logging.info("Fetching credentials directly from Google Secret Manager...")
+            # --- 全新的、与您的 Secret 配置匹配的凭据获取逻辑 ---
+            self._logging.info(f"Fetching credentials from a single secret named '{self._trading_mode}'...")
             secrets = {}
             try:
                 # 初始化客户端
                 client = secretmanager.SecretManagerServiceClient()
                 project_id = self._env['PROJECT_ID']
 
-                # 根据您的部署计划，构建两个密钥的完整资源名称
-                username_secret_name = f"projects/{project_id}/secrets/ib-gateway-username/versions/latest"
-                password_secret_name = f"projects/{project_id}/secrets/ib-gateway-password/versions/latest"
+                # 根据交易模式构建密钥名称 (例如 'paper' 或 'live')
+                secret_name = f"projects/{project_id}/secrets/{self._trading_mode}/versions/latest"
 
-                # 获取用户名
-                username_response = client.access_secret_version(request={"name": username_secret_name})
-                username = username_response.payload.data.decode("UTF-8")
+                # 访问密钥，获取其内容 (这是一个 JSON 字符串)
+                response = client.access_secret_version(request={"name": secret_name})
+                credentials_json = response.payload.data.decode("UTF-8")
 
-                # 获取密码
-                password_response = client.access_secret_version(request={"name": password_secret_name})
-                password = password_response.payload.data.decode("UTF-8")
+                # 解析 JSON 字符串
+                credentials = json.loads(credentials_json)
 
+                # 从解析后的字典中提取 userid 和 password
                 # IBC 库需要 'userid' 和 'password' 这两个键
-                secrets['userid'] = username
-                secrets['password'] = password
-                self._logging.info("Successfully fetched IB credentials from Secret Manager.")
+                secrets['userid'] = credentials.get('userid')
+                secrets['password'] = credentials.get('password')
+
+                if not secrets['userid'] or not secrets['password']:
+                    raise ValueError("JSON content from secret is missing 'userid' or 'password' keys.")
+
+                self._logging.info(f"Successfully fetched and parsed credentials from secret '{self._trading_mode}'.")
 
             except Exception as e:
-                # 如果获取失败，这是致命错误，必须记录并停止应用启动
-                self._logging.critical(f"FATAL: Could not fetch credentials from Secret Manager. Error: {e}")
+                # 如果获取或解析失败，这是致命错误
+                self._logging.critical(f"FATAL: Could not fetch or parse credentials from secret '{self._trading_mode}'. Error: {e}")
                 raise ValueError("Failed to load IB credentials from Secret Manager.") from e
             # --- 凭据获取逻辑结束 ---
 
@@ -98,6 +98,7 @@ class Environment:
             # set IB logging level
             util.logToConsole(level=logging.ERROR)
 
+        # ... (后续的 @property 和其他方法保持不变) ...
         @property
         def config(self):
             return self._config
@@ -119,23 +120,14 @@ class Environment:
             return self._trading_mode
 
         def get_account_values(self, account, rows=('NetLiquidation', 'CashBalance', 'MaintMarginReq')):
-            """
-            Requests account data from IB.
-
-            :param account: account identifier (str)
-            :param rows: rows to return (list)
-            :return: account data (dict)
-            """
             account_summary = {}
             account_value = []
             timeout = self.ACCOUNT_VALUE_TIMEOUT
             while not len(account_value) and timeout:
-                # needs several attempts sometimes, so let's retry
                 self._ibgw.sleep(1)
                 account_value = self._ibgw.accountValues(account)
                 timeout -= 1
             if len(account_value):
-                # filter rows and build dict
                 account_values = util.df(account_value).set_index(['tag', 'currency']).loc[list(rows), 'value']
                 for (k, c), v in account_values.items():
                     if c != 'BASE':
@@ -143,7 +135,6 @@ class Environment:
                             account_summary[k][c] = float(v)
                         else:
                             account_summary[k] = {c: float(v)}
-
             return account_summary
 
     __instance = None
@@ -151,15 +142,12 @@ class Environment:
     def __init__(self, trading_mode='paper', ibc_config=None):
         if Environment.__instance is None:
             Environment.__instance = self.__Implementation(trading_mode, ibc_config or {})
-            # store instance reference as the only member in the handle
             self.__dict__['_Environment__instance'] = Environment.__instance
 
     def __getattr__(self, attr):
-        """ Delegate access to implementation """
         return getattr(self.__instance, attr)
 
     def __setattr__(self, attr, value):
-        """ Delegate access to implementation """
         return setattr(self.__instance, attr, value)
 
     def destroy(self):

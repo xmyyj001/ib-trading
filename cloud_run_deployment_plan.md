@@ -103,21 +103,25 @@ graph TD
         ```
 
 2.  **创建并配置 Google Secret Manager Secrets**
-    *   为了安全地存储 IB Gateway 的用户名和密码，建议使用 Google Secret Manager。
-    *   创建 Secret：
         ```bash
-        echo -n "your_ib_username" | gcloud secrets create ib-gateway-username --data-file=-
-        echo -n "your_ib_password" | gcloud secrets create ib-gateway-password --data-file=-
-        ```
-        将 `your_ib_username` 和 `your_ib_password` 替换为你的实际凭据。
-    *   授予 Cloud Run 服务账号访问这些 Secret 的权限：
-        ```bash
-        gcloud secrets add-iam-policy-binding ib-gateway-username \
-            --member "serviceAccount:ib-trading@[YOUR_PROJECT_ID].iam.gserviceaccount.com" \
-            --role "roles/secretmanager.secretAccessor"
-        gcloud secrets add-iam-policy-binding ib-gateway-password \
-            --member "serviceAccount:ib-trading@[YOUR_PROJECT_ID].iam.gserviceaccount.com" \
-            --role "roles/secretmanager.secretAccessor"
+        PROJECT_ID="gold-gearbox-424413-k1"
+        SECRET_NAME="paper"
+
+    # 创建secret容器
+        gcloud secrets describe "${SECRET_NAME}" --project="${PROJECT_ID}" > /dev/null 2>&1 || \
+        gcloud secrets create "${SECRET_NAME}" \
+            --replication-policy="automatic" \
+            --project="${PROJECT_ID}"
+
+    # 添加secret版本（替换为您的真实凭据）
+        gcloud secrets versions add "${SECRET_NAME}" --project="${PROJECT_ID}" \
+        --data-file=- <<< '{"userid": "YOUR_PAPER_USERID", "password": "YOUR_PAPER_PASSWORD"}'
+
+    # 授予Cloud Run服务账号访问权限
+        gcloud secrets add-iam-policy-binding "${SECRET_NAME}" \
+            --member="serviceAccount:ib-trading@${PROJECT_ID}.iam.gserviceaccount.com" \
+            --role="roles/secretmanager.secretAccessor" \
+            --project="${PROJECT_ID}"
         ```
 
 3.  **修改应用程序代码以读取 Secret Manager 凭据**
@@ -143,10 +147,10 @@ graph TD
             cd cloud-run/base
 
             # 构建并标记镜像
-            docker build -t europe-docker.pkg.dev/[YOUR_PROJECT_ID]/cloud-run-repo/base:latest .
+            docker build -t europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/base:latest .
 
             # 推送镜像
-            docker push europe-docker.pkg.dev/[YOUR_PROJECT_ID]/cloud-run-repo/base:latest
+            docker push europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/base:latest
         ```
 
 
@@ -177,6 +181,8 @@ graph TD
         请确保 `_TRADING_MODE` 和 `_GCP_REGION` 的值与你的需求一致。 -->
 
         ```bash 
+        cd ~/ib-trading
+        
         GIT_TAG=$(git rev-parse --short HEAD)
         
         then:

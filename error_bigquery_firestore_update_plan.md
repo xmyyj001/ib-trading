@@ -152,26 +152,6 @@ graph TD
         ```
 
 ### 3.8 配置Secret Manager
-        ```bash
-        PROJECT_ID="gold-gearbox-424413-k1"
-        SECRET_NAME="paper"
-
-        # 创建secret容器
-        gcloud secrets describe "${SECRET_NAME}" --project="${PROJECT_ID}" > /dev/null 2>&1 || \
-        gcloud secrets create "${SECRET_NAME}" \
-            --replication-policy="automatic" \
-            --project="${PROJECT_ID}"
-
-        # 添加secret版本（替换为您的真实凭据）
-        gcloud secrets versions add "${SECRET_NAME}" --project="${PROJECT_ID}" \
-        --data-file=- <<< '{"userid": "YOUR_PAPER_USERID", "password": "YOUR_PAPER_PASSWORD"}'
-
-        # 授予Cloud Run服务账号访问权限
-        gcloud secrets add-iam-policy-binding "${SECRET_NAME}" \
-            --member="serviceAccount:ib-trading@${PROJECT_ID}.iam.gserviceaccount.com" \
-            --role="roles/secretmanager.secretAccessor" \
-            --project="${PROJECT_ID}"
-        ```
 
 ---
 
@@ -190,23 +170,5 @@ gcloud run services logs read ib-paper --region asia-east1 --limit 100
 
 # 4.出现问题删除cloud-run 
 gcloud run services delete ib-paper --region asia-east1
-```
-
-
----
-
-## TWS安装日志说明
-在`cloudbuild.yaml`的集成测试步骤中配置环境变量：
-
-```yaml
-- name: 'gcr.io/cloud-builders/docker'
-  args: [
-      'run',
-      '--network', 'cloudbuild',
-      '--volume', '/workspace:/workspace',
-      '--env', 'MOCK_TWS_VERSION=981',     # 提供模拟版本
-      '--env', 'TWS_INSTALL_LOG=/tmp/dummy_install.log', # 指向空文件
-      ...
-  ]
 ```
 
