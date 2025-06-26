@@ -1,5 +1,5 @@
 # ===================================================================
-# == FINAL CORRECTED: cloud-run/application/cloudbuild.yaml
+# == FINAL CORRECTED v3: cloud-run/application/cloudbuild.yaml
 # ===================================================================
 
 steps:
@@ -30,7 +30,7 @@ steps:
 
   # --- 检测和初始化步骤 ---
 
-  # 步骤 4: 运行依赖安全检查 (优化后)
+  # 步骤 4: 运行依赖安全检查
   - name: "gcr.io/cloud-builders/docker"
     id: "Safety-Check"
     args:
@@ -44,25 +44,21 @@ steps:
     waitFor: ['Push-Application']
 
   # 步骤 5: 运行单元测试 (已修复)
-  - name: "gcr.io/cloud-builders/gcloud" # <--- 关键修复：使用 gcloud builder
+  - name: "gcr.io/cloud-community-builders/docker-cloud-sdk" # <--- 关键修复：使用社区的全能 builder
     id: "Unit-Tests"
     entrypoint: "bash"
     args:
     - "-c"
     - |
+      # 在这个 builder 中，docker 和 gcloud 命令都可用
+      # 并且它会自动处理认证，我们甚至不需要手动挂载 volume
       docker run --rm \
         --env "PROJECT_ID=${PROJECT_ID}" \
         --env "TRADING_MODE=${_TRADING_MODE}" \
-        --env "GOOGLE_APPLICATION_CREDENTIALS=/gcloud-credentials/application_default_credentials.json" \
-        -v "gcloud-config:/gcloud-credentials" \
         --entrypoint python \
         europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG} \
         -m unittest discover -p "test_*.py"
-    volumes:
-      - name: 'gcloud-config'
-        path: '/gcloud-credentials'
     waitFor: ['Push-Application']
-
 
   # 步骤 6: 初始化 Firestore 配置
   - name: 'python:3.9-slim'
@@ -77,7 +73,7 @@ steps:
     waitFor: ['Push-Application']
 
   # 步骤 7: 运行集成测试 (已修复)
-  - name: "gcr.io/cloud-builders/gcloud" # <--- 关键修复：使用 gcloud builder
+  - name: "gcr.io/cloud-community-builders/docker-cloud-sdk" # <--- 关键修复：使用社区的全能 builder
     id: "Integration-Tests"
     entrypoint: "bash"
     args:
@@ -88,14 +84,9 @@ steps:
         --env "PROJECT_ID=${PROJECT_ID}" \
         --env "TRADING_MODE=${_TRADING_MODE}" \
         --env "K_REVISION=cloudbuild" \
-        --env "GOOGLE_APPLICATION_CREDENTIALS=/gcloud-credentials/application_default_credentials.json" \
-        -v "gcloud-config:/gcloud-credentials" \
         --entrypoint bash \
         europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG} \
         -c "/usr/bin/Xvfb :0 -ac -screen 0 1024x768x16 +extension RANDR & export DISPLAY=:0 && python ./_tests/integration_tests.py"
-    volumes:
-      - name: 'gcloud-config'
-        path: '/gcloud-credentials'
     waitFor: ['Initialize-Firestore']
 
   # --- 部署步骤 ---
