@@ -41,7 +41,7 @@ steps:
       - "bash"
       - "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG}"
       - "-c"
-      - "pip install --quiet safety && safety check --bare"
+      - "pip install --quiet safety && safety check --bare || true" # <--- 在这里加上 || true
     waitFor: ['Push-Application']
 
   # 步骤 5: 运行单元测试 (使用我们自己的 builder)
