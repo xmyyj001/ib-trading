@@ -53,7 +53,9 @@ steps:
     - |
       # 在这个 builder 中，docker 和 gcloud 命令都可用
       # 并且它会自动处理认证
+      # 使用 cloudbuild 网络
       docker run --rm \
+        --network="cloudbuild" \    
         --env "PROJECT_ID=${PROJECT_ID}" \
         --env "TRADING_MODE=${_TRADING_MODE}" \
         --entrypoint python \
@@ -74,6 +76,7 @@ steps:
     waitFor: ['Push-Application']
 
   # 步骤 7: 运行集成测试 (使用我们自己的 builder)
+    # 进行网络修复 cloudbuild 网络
   - name: "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/my-docker-cloud-sdk:latest" # <--- 关键修复：使用您自己的 builder
     id: "Integration-Tests"
     entrypoint: "bash"
@@ -81,6 +84,7 @@ steps:
     - "-c"
     - |
       docker run --rm \
+        --network="cloudbuild" \ 
         --env "PYTHONPATH=/home" \
         --env "PROJECT_ID=${PROJECT_ID}" \
         --env "TRADING_MODE=${_TRADING_MODE}" \
