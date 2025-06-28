@@ -145,14 +145,16 @@ graph TD
 
             # 进入 base 目录
             cd cloud-run/base
-
             # 构建并标记镜像
             docker build -t europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/base:latest .
-
             # 推送镜像
             docker push europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/base:latest
         ```
-
+    * 部署基础镜像
+        cd cloud-run/base
+        docker build -t europe-docker.pkg.dev/gold-gearbox-424413-k1/cloud-run-repo/base:latest .
+        docker push europe-docker.pkg.dev/gold-gearbox-424413-k1/cloud-run-repo/base:latest
+        cd ../..
 
 5.  **配置 Cloud Build 触发器**
     *   为了自动化部署，建议在 Google Cloud Console 中为你的代码仓库设置一个 Cloud Build 触发器。

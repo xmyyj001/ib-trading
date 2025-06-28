@@ -1,53 +1,41 @@
 #!/bin/bash
 
 # =======================================================
-# == DEBUGGING VERSION of gatewaystart.sh
+# == FINAL DEFINITIVE VERSION v2: gatewaystart.sh
 # =======================================================
 
-# 开启详细模式，打印出每一行执行的命令
 set -x
 
-# 从环境变量获取配置，如果未设置则使用默认值
-TWS_MAJOR_VRSN=${TWS_VERSION:-1030}
-IBC_INI=${IBC_INI:-/opt/ibc/config.ini}
+# --- 1. 定义所有路径和参数 ---
 TRADING_MODE=${TRADING_MODE:-paper}
-IBC_PATH=${IBC_PATH:-/opt/ibc}
-TWS_PATH=${TWS_PATH:-/root/ibgateway}
-TWS_SETTINGS_PATH=${TWS_SETTINGS_PATH:-/root/ibgateway}
-LOG_PATH=${LOG_PATH:-/opt/ibc/logs}
-
-# 从环境变量获取IB账户凭据
 TWSUSERID=${IB_USERNAME}
 TWSPASSWORD=${IB_PASSWORD}
 
-# 确保日志目录存在
+IBC_PATH="/opt/ibc"
+TWS_PATH="/opt/ibgateway" # 这是我们在 Dockerfile 中定义的统一路径
+LOG_PATH="/opt/ibc/logs"
+JAVA_EXEC="/usr/bin/java"
+
+# --- 2. 构建 Classpath ---
+# 关键修复：我们现在知道所有 Jar 都在 TWS_PATH 下
+CP="${TWS_PATH}/*:${IBC_PATH}/IBController.jar"
+
+# --- 3. 构建 IBC 参数 ---
+IBC_ARGS="TwsPath=${TWS_PATH} IbLoginId=${TWSUSERID} IbPassword=${TWSPASSWORD} TradingMode=${TRADING_MODE}"
+
+# --- 4. 确保日志目录存在 ---
 mkdir -p "${LOG_PATH}"
 
-echo "--- Starting IB Gateway with the following parameters: ---"
-echo "TWS Version: ${TWS_MAJOR_VRSN}"
-echo "Trading Mode: ${TRADING_MODE}"
-echo "User ID: ${TWSUSERID}"
-echo "IBC Path: ${IBC_PATH}"
-echo "TWS Path: ${TWS_PATH}"
-echo "Log Path: ${LOG_PATH}"
-echo "--------------------------------------------------------"
+echo "--- [INFO] Preparing to launch IB Gateway directly via System Java ---"
+echo "Java: ${JAVA_EXEC}"
+echo "Classpath: ${CP}"
+echo "IBC Args: ${IBC_ARGS}"
+echo "----------------------------------------------------------------"
 
-
-# --- 关键修复：移除 exec，直接调用 start.sh ---
-# 我们不再使用 exec，这样脚本就不会替换掉当前的 shell
-# 我们直接调用它，并等待它完成
-"${IBC_PATH}/start.sh" \
-    "${TWS_MAJOR_VRSN}" \
-    "${TRADING_MODE}" \
-    "${TWSUSERID}" \
-    "${TWSPASSWORD}" \
-    --ibc-ini="${IBC_INI}" \
-    --tws-path="${TWS_PATH}" \
-    --tws-settings-path="${TWS_SETTINGS_PATH}" \
-    --log-path="${LOG_PATH}" \
-    --onexit-error=true \
-    --onexit-exec="${IBC_PATH}/stop.sh"
-
-# 脚本执行到这里后，我们可以检查一下进程状态
-echo "--- start.sh script has finished. Checking for Java processes... ---"
-ps aux | grep java || echo "No Java process found."
+# --- 5. 直接执行 java 命令 ---
+exec "${JAVA_EXEC}" \
+    -cp "${CP}" \
+    -Dlog.path="${LOG_PATH}/" \
+    -Dibc.ini.path="${IBC_PATH}" \
+    com.ib.controller.IBCoco \
+    "${IBC_ARGS}"
