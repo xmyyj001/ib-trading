@@ -215,7 +215,6 @@ graph TD
         ```bash
         # 获取服务 URL
         SERVICE_URL=$(gcloud run services describe ib-paper --region asia-east1 --format="value(status.url)")
-
         # 获取身份令牌
         TOKEN=$(gcloud auth print-identity-token)
 
