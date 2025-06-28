@@ -1,6 +1,6 @@
 # ===================================================================
-# == FINAL DEFINITIVE VERSION v11: cloud-run/base/Dockerfile
-# == Provides full graphics library support for the installer
+# == FINAL DEFINITIVE VERSION v12: cloud-run/base/Dockerfile
+# == Adds the final xauth dependency for xvfb-run
 # ===================================================================
 FROM python:3.9-slim
 
@@ -9,12 +9,13 @@ ENV IBC_PATH=/opt/ibc
 ENV DISPLAY=:0
 
 # --- 1. 安装所有系统依赖 ---
-# 关键修复：安装 libgtk-3-0 和其他相关的图形库，为 Java AWT 提供完整的环境
+# 关键修复：添加 xauth 包
 RUN apt-get update && \
     apt-get install --no-install-recommends -y \
         wget \
         unzip \
         xvfb \
+        xauth \
         libxtst6 \
         libxrender1 \
         procps \
