@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # =======================================================
-# == FINAL DEFINITIVE VERSION v8: gatewaystart.sh
+# == FINAL DEFINITIVE VERSION v9: gatewaystart.sh
 # =======================================================
 
 set -x
@@ -12,8 +12,8 @@ TWSUSERID=${IB_USERNAME}
 TWSPASSWORD=${IB_PASSWORD}
 
 IBC_PATH="/opt/ibc"
-# TWS_PATH 会从 Dockerfile 的 ENV 中继承，现在是正确的 /usr/local/ibgateway
-TWS_PATH=${TWS_PATH:-/usr/local/ibgateway}
+# TWS_PATH 会从 Dockerfile 的 ENV 中继承，现在是正确的 /root/Jts
+TWS_PATH=${TWS_PATH:-/root/Jts}
 LOG_PATH="/opt/ibc/logs"
 
 # --- 2. 确保日志目录存在 ---
