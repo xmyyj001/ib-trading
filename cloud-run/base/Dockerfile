@@ -1,11 +1,11 @@
 # ===================================================================
-# == FINAL DEFINITIVE VERSION v16: cloud-run/base/Dockerfile
-# == Based on verified community best practices for IB Gateway installation
+# == FINAL DEFINITIVE VERSION v17: cloud-run/base/Dockerfile
+# == Uses console mode with automated input for a reliable installation
 # ===================================================================
 FROM python:3.9-slim
 
 # --- 1. 定义所有环境变量 ---
-# 关键修复：将 TWS_PATH 设置为经过验证的、真正的默认安装路径
+# 关键修复：我们现在知道，安装程序会强制安装到 /root/Jts
 ENV TWS_PATH=/root/Jts
 ENV IBC_PATH=/opt/ibc
 ENV DISPLAY=:0
@@ -17,15 +17,19 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# --- 3. 安装 IB Gateway (最简单、最可靠的方式) ---
-# 我们让安装程序以静默模式安装到它唯一的、真实的默认位置 /root/Jts
+# --- 3. 安装 IB Gateway (使用控制台模式并自动应答) ---
+# 这是整个修复的核心
 RUN wget -O /tmp/ibgw.sh https://download2.interactivebrokers.com/installers/ibgateway/stable-standalone/ibgateway-stable-standalone-linux-x64.sh && \
     chmod +x /tmp/ibgw.sh && \
-    # -q 标志确保无人值守安装
-    /tmp/ibgw.sh -q && \
+    # 关键修复：使用 echo 和管道，为控制台安装程序提供自动输入
+    # 1. 第一个 echo "" 模拟按回车接受许可协议
+    # 2. 第二个 echo "1" 选择默认安装路径 (/root/Jts)
+    # 3. 第三个 echo "" 模拟按回车确认安装
+    # 4. 最后一个 echo "" 模拟按回车完成安装
+    (echo ""; echo "1"; echo ""; echo "") | /tmp/ibgw.sh -c && \
     rm -f /tmp/ibgw.sh && \
-    # 关键验证：直接验证真正的默认路径下是否存在 jts.jar
-    test -f "${TWS_PATH}/jts.jar" || (echo "FATAL: IB Gateway installation failed, jts.jar not found at default path /root/Jts!" && exit 1)
+    # 关键验证：现在，我们验证文件是否真的在 /root/Jts 路径下
+    test -f "${TWS_PATH}/jts.jar" || (echo "FATAL: IB Gateway installation failed, jts.jar not found at /root/Jts!" && exit 1)
 
 # --- 4. 下载并正确解压 IBC v3.22.0 ---
 RUN mkdir -p "${IBC_PATH}" && \
