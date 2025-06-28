@@ -1,6 +1,6 @@
 # ===================================================================
-# == FINAL DEFINITIVE VERSION v12: cloud-run/base/Dockerfile
-# == Adds the final xauth dependency for xvfb-run
+# == FINAL DEFINITIVE VERSION v13: cloud-run/base/Dockerfile
+# == Uses true silent installation mode for the installer
 # ===================================================================
 FROM python:3.9-slim
 
@@ -9,29 +9,19 @@ ENV IBC_PATH=/opt/ibc
 ENV DISPLAY=:0
 
 # --- 1. 安装所有系统依赖 ---
-# 关键修复：添加 xauth 包
 RUN apt-get update && \
     apt-get install --no-install-recommends -y \
-        wget \
-        unzip \
-        xvfb \
-        xauth \
-        libxtst6 \
-        libxrender1 \
-        procps \
-        xterm \
-        xfonts-base \
-        openjdk-17-jre \
-        libgtk-3-0 \
-        libasound2 && \
+        wget unzip xvfb xauth libxtst6 libxrender1 procps xterm xfonts-base openjdk-17-jre libgtk-3-0 libasound2 && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# --- 2. 安装 IB Gateway (现在它应该能成功运行) ---
+# --- 2. 安装 IB Gateway (使用真正的静默模式) ---
+# 关键修复：在安装命令中添加 -q 标志，这是 install4j 的标准静默模式参数
 RUN wget -O /tmp/ibgw.sh https://download2.interactivebrokers.com/installers/ibgateway/stable-standalone/ibgateway-stable-standalone-linux-x64.sh && \
     chmod +x /tmp/ibgw.sh && \
-    # 在 Xvfb 环境中运行安装程序
-    xvfb-run --auto-servernum /tmp/ibgw.sh -dir "${TWS_PATH}" && \
+    # -q 标志告诉安装程序以无人值守模式运行，自动接受所有默认设置
+    # 我们不再需要 xvfb-run，因为 -q 模式通常不需要图形环境
+    /tmp/ibgw.sh -q -dir "${TWS_PATH}" && \
     rm -f /tmp/ibgw.sh && \
     # 关键验证
     test -f "${TWS_PATH}/jts.jar" || (echo "FATAL: IB Gateway installation failed, jts.jar not found!" && exit 1)
