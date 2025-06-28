@@ -1,9 +1,11 @@
 #!/bin/bash
 
 # =======================================================
-# == FINAL DEFINITIVE VERSION v5: gatewaystart.sh
+# == FINAL DEFINITIVE VERSION v6: gatewaystart.sh
+# == Direct Java Invocation with Correct Classpath
 # =======================================================
 
+set -e
 set -x
 
 # --- 1. 定义所有路径和参数 ---
@@ -14,19 +16,29 @@ TWSPASSWORD=${IB_PASSWORD}
 IBC_PATH="/opt/ibc"
 TWS_PATH="/opt/ibgateway"
 LOG_PATH="/opt/ibc/logs"
+JAVA_EXEC="/usr/bin/java"
 
-# --- 2. 确保日志目录存在 ---
+# --- 2. 构建真正正确的 Classpath ---
+# 基于我们 ls -lR 的发现：
+# 1. IB Gateway 的所有 Jar 都在 TWS_PATH 下
+# 2. IBC 的核心 Jar 是 IBC.jar，位于 IBC_PATH 下
+TWS_JARS=$(find "${TWS_PATH}" -name '*.jar' -print | tr '\n' ':')
+CP="${TWS_JARS}${IBC_PATH}/IBC.jar"
+
+# --- 3. 构建 IBC 参数 ---
+IBC_ARGS="TwsPath=${TWS_PATH} IbLoginId=${TWSUSERID} IbPassword=${TWSPASSWORD} TradingMode=${TRADING_MODE}"
+
+# --- 4. 确保日志目录存在 ---
 mkdir -p "${LOG_PATH}"
 
-echo "--- [INFO] Launching IB Gateway via official IBC scripts ---"
+echo "--- [INFO] Launching IB Gateway via Direct Java Call (v6) ---"
+echo "Classpath: ${CP}"
 
-# --- 3. 直接在前台调用 IBC 的核心启动脚本 ---
-# 关键修复：使用官方发行版中正确的脚本路径
-# 我们使用 exec 来让它成为主进程
-exec "${IBC_PATH}/scripts/ibcstart.sh" \
-    "--mode=${TRADING_MODE}" \
-    "--user=${TWSUSERID}" \
-    "--pw=${TWSPASSWORD}" \
-    "--tws-path=${TWS_PATH}" \
-    "--ibc-path=${IBC_PATH}" \
-    "--log-path=${LOG_PATH}"
+# --- 5. 直接执行 java 命令 ---
+# 关键：主类是 com.ib.controller.IBCoco，它位于 IBC.jar 中
+exec "${JAVA_EXEC}" \
+    -cp "${CP}" \
+    -Dlog.path="${LOG_PATH}/" \
+    -Dibc.ini.path="${IBC_PATH}" \
+    com.ib.controller.IBCoco \
+    "${IBC_ARGS}"
