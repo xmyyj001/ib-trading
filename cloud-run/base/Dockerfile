@@ -36,5 +36,6 @@ RUN set -e && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
+COPY ibc/gatewaystart.sh ${IBC_PATH}/gatewaystart.sh
 COPY ibc/config.ini ${IBC_INI}
 COPY ibc/jts.ini "${TWS_PATH}/${TWS_VERSION}/jts.ini"
