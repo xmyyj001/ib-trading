@@ -1,12 +1,11 @@
 # ===================================================================
-# == FINAL DEFINITIVE VERSION v18: cloud-run/base/Dockerfile
-# == Uses the absolute correct, verified installation path
+# == FINAL DEFINITIVE VERSION v20: cloud-run/base/Dockerfile
+# == Abandons all shell scripts, uses Direct Java Invocation
 # ===================================================================
 FROM python:3.9-slim
 
 # --- 1. 定义所有环境变量 ---
-# 关键修复：将 TWS_PATH 设置为经过验证的、真正的、完整的安装路径
-ENV TWS_PATH=/root/Jts/ibgateway/1030
+ENV TWS_PATH=/root/ibgateway/1030
 ENV IBC_PATH=/opt/ibc
 ENV DISPLAY=:0
 
@@ -20,22 +19,20 @@ RUN apt-get update && \
 # --- 3. 安装 IB Gateway (使用控制台模式并自动应答) ---
 RUN wget -O /tmp/ibgw.sh https://download2.interactivebrokers.com/installers/ibgateway/stable-standalone/ibgateway-stable-standalone-linux-x64.sh && \
     chmod +x /tmp/ibgw.sh && \
-    # 使用 echo 和管道，为控制台安装程序提供自动输入
     (echo ""; echo "1"; echo ""; echo "") | /tmp/ibgw.sh -c && \
     rm -f /tmp/ibgw.sh && \
-    # 关键验证：现在，我们验证文件是否真的在我们最终确定的路径中
-    test -f "${TWS_PATH}/jts.jar" || (echo "FATAL: jts.jar not found at the final path ${TWS_PATH}!" && exit 1)
+    # 验证最终路径下的核心 Jar 文件
+    test -f "${TWS_PATH}/jars/jts.jar" || (echo "FATAL: jts.jar not found at ${TWS_PATH}/jars!" && exit 1)
 
 # --- 4. 下载并正确解压 IBC v3.22.0 ---
 RUN mkdir -p "${IBC_PATH}" && \
     wget -q -O /tmp/IBC.zip https://github.com/IbcAlpha/IBC/releases/download/3.22.0/IBCLinux-3.22.0.zip && \
     unzip -o /tmp/IBC.zip -d "${IBC_PATH}" && \
     rm -f /tmp/IBC.zip && \
-    test -f "${IBC_PATH}/scripts/ibcstart.sh" || (echo "FATAL: ibcstart.sh not found!" && exit 1)
+    # 验证核心的 IBC.jar 存在
+    test -f "${IBC_PATH}/IBC.jar" || (echo "FATAL: IBC.jar not found!" && exit 1)
 
 # --- 5. 复制我们自己的配置文件和启动脚本 ---
 COPY ibc/config.ini ${IBC_PATH}/config.ini
 COPY ibc/gatewaystart.sh ${IBC_PATH}/gatewaystart.sh
-RUN chmod +x ${IBC_PATH}/*.sh && \
-    chmod +x ${IBC_PATH}/scripts/*.sh && \
-    chmod +x ${IBC_PATH}/gatewaystart.sh
+RUN chmod +x ${IBC_PATH}/gatewaystart.sh
