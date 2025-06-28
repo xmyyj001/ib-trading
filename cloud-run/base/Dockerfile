@@ -1,12 +1,12 @@
 # ===================================================================
-# == FINAL DEFINITIVE VERSION v17: cloud-run/base/Dockerfile
-# == Uses console mode with automated input for a reliable installation
+# == FINAL DEFINITIVE VERSION v18: cloud-run/base/Dockerfile
+# == Uses the absolute correct, verified installation path
 # ===================================================================
 FROM python:3.9-slim
 
 # --- 1. 定义所有环境变量 ---
-# 关键修复：我们现在知道，安装程序会强制安装到 /root/Jts
-ENV TWS_PATH=/root/Jts
+# 关键修复：将 TWS_PATH 设置为经过验证的、真正的、完整的安装路径
+ENV TWS_PATH=/root/Jts/ibgateway/1030
 ENV IBC_PATH=/opt/ibc
 ENV DISPLAY=:0
 
@@ -18,18 +18,13 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # --- 3. 安装 IB Gateway (使用控制台模式并自动应答) ---
-# 这是整个修复的核心
 RUN wget -O /tmp/ibgw.sh https://download2.interactivebrokers.com/installers/ibgateway/stable-standalone/ibgateway-stable-standalone-linux-x64.sh && \
     chmod +x /tmp/ibgw.sh && \
-    # 关键修复：使用 echo 和管道，为控制台安装程序提供自动输入
-    # 1. 第一个 echo "" 模拟按回车接受许可协议
-    # 2. 第二个 echo "1" 选择默认安装路径 (/root/Jts)
-    # 3. 第三个 echo "" 模拟按回车确认安装
-    # 4. 最后一个 echo "" 模拟按回车完成安装
+    # 使用 echo 和管道，为控制台安装程序提供自动输入
     (echo ""; echo "1"; echo ""; echo "") | /tmp/ibgw.sh -c && \
     rm -f /tmp/ibgw.sh && \
-    # 关键验证：现在，我们验证文件是否真的在 /root/Jts 路径下
-    test -f "${TWS_PATH}/jts.jar" || (echo "FATAL: IB Gateway installation failed, jts.jar not found at /root/Jts!" && exit 1)
+    # 关键验证：现在，我们验证文件是否真的在我们最终确定的路径中
+    test -f "${TWS_PATH}/jts.jar" || (echo "FATAL: jts.jar not found at the final path ${TWS_PATH}!" && exit 1)
 
 # --- 4. 下载并正确解压 IBC v3.22.0 ---
 RUN mkdir -p "${IBC_PATH}" && \
