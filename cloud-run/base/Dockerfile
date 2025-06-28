@@ -1,6 +1,6 @@
 # ===================================================================
-# == FINAL DEFINITIVE VERSION v13: cloud-run/base/Dockerfile
-# == Uses true silent installation mode for the installer
+# == FINAL DEFINITIVE VERSION v14: cloud-run/base/Dockerfile
+# == Let installer use default path, then move files. This is the most robust way.
 # ===================================================================
 FROM python:3.9-slim
 
@@ -15,16 +15,18 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# --- 2. 安装 IB Gateway (使用真正的静默模式) ---
-# 关键修复：在安装命令中添加 -q 标志，这是 install4j 的标准静默模式参数
+# --- 2. 安装 IB Gateway (最稳健的方式) ---
+# 关键修复：我们让安装程序以静默模式安装到它的默认位置 /root/Jts
 RUN wget -O /tmp/ibgw.sh https://download2.interactivebrokers.com/installers/ibgateway/stable-standalone/ibgateway-stable-standalone-linux-x64.sh && \
     chmod +x /tmp/ibgw.sh && \
-    # -q 标志告诉安装程序以无人值守模式运行，自动接受所有默认设置
-    # 我们不再需要 xvfb-run，因为 -q 模式通常不需要图形环境
-    /tmp/ibgw.sh -q -dir "${TWS_PATH}" && \
+    # 运行静默安装，不指定 -dir 参数
+    /tmp/ibgw.sh -q && \
     rm -f /tmp/ibgw.sh && \
-    # 关键验证
-    test -f "${TWS_PATH}/jts.jar" || (echo "FATAL: IB Gateway installation failed, jts.jar not found!" && exit 1)
+    # 关键修复：在安装完成后，将所有文件从默认路径 /root/Jts 移动到我们期望的路径 /opt/ibgateway
+    mkdir -p "${TWS_PATH}" && \
+    mv /root/Jts/* "${TWS_PATH}/" && \
+    # 关键验证：现在，我们再来验证 jts.jar 是否在我们期望的最终路径中
+    test -f "${TWS_PATH}/jts.jar" || (echo "FATAL: jts.jar not found after moving!" && exit 1)
 
 # --- 3. 下载并正确解压 IBC v3.22.0 ---
 RUN mkdir -p "${IBC_PATH}" && \
