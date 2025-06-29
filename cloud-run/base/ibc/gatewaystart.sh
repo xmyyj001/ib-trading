@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # =======================================================
-# == FINAL DEFINITIVE VERSION (GOLDEN SCRIPT v3): gatewaystart.sh
+# == FINAL DEFINITIVE VERSION (Based on 100% Verified Facts): gatewaystart.sh
 # =======================================================
 
 set -e
@@ -18,10 +18,9 @@ LOG_PATH="/opt/ibc/logs"
 JAVA_EXEC="/usr/bin/java"
 
 # --- 2. 构建最终的、正确的 Classpath ---
-# 基于我们亲眼所见的事实构建
 TWS_JARS=$(find "${TWS_PATH}/jars" -name '*.jar' -print | tr '\n' ':')
-# 关键：我们现在知道 v3.7.0 的核心 Jar 是 IBController.jar
-IBC_JARS=$(find "${IBC_PATH}" -name 'IBController.jar' -print | tr '\n' ':')
+# 关键修复：我们现在使用我们亲眼看到的、正确的 IBC.jar 文件
+IBC_JARS=$(find "${IBC_PATH}" -name 'IBC.jar' -print | tr '\n' ':')
 CP="${TWS_JARS}${IBC_JARS}"
 
 # --- 3. 构建 IBC 参数 ---

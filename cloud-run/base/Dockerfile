@@ -32,7 +32,7 @@ RUN mkdir -p "${IBC_PATH}" && \
     unzip -o /tmp/IBC.zip -d "${IBC_PATH}" && \
     rm -f /tmp/IBC.zip && \
     # 关键验证：确认核心的 IBController.jar 存在
-    test -f "${IBC_PATH}/IBController.jar" || (echo "FATAL: IBController.jar not found after unzip!" && exit 1)
+    test -f "${IBC_PATH}/IBC.jar" || (echo "FATAL: IBController.jar not found after unzip!" && exit 1)
 
 # --- 5. 复制我们自己的配置文件和启动脚本 ---
 COPY ibc/config.ini ${IBC_PATH}/config.ini
