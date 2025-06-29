@@ -1,28 +1,23 @@
-# ===================================================================
-# == CORRECTED VERSION: cloud-run/base/cloudbuild.yaml
-# ===================================================================
-
+# cloud-run/base/cloudbuild.yaml
 steps:
+# 步骤 1: 将您 Cloud Shell 中的本地依赖，复制到 Cloud Build 的工作空间中
+- name: 'gcr.io/cloud-builders/gsutil'
+  args: ['-m', 'cp', '-r', '/home/xmyyj001/local_deps', '.']
+  # 注意：这里的 /home/xmyyj001 需要与您的 Cloud Shell 用户主目录匹配
+
+# 步骤 2: 构建 base 镜像
 - name: 'gcr.io/cloud-builders/docker'
-  id: 'Build and Push Base Image'
   args:
     - 'build'
-    # 标签1: 使用 'latest' 标签，供 application Dockerfile 使用
     - '--tag'
     - 'europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/base:latest'
-    # 标签2 (可选，但推荐): 使用 Git 提交哈希作为唯一版本标签
-    - '--tag'
-    - 'europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/base:${SHORT_SHA}'
-    # 指定 Dockerfile 的上下文路径
-    - 'cloud-run/base'
-    - '--file'
-    - 'cloud-run/base/Dockerfile'
+    - '.' # 使用当前目录 (cloud-run/base) 作为构建上下文
+  dir: 'cloud-run/base' # 指定 Dockerfile 所在的目录
 
-# 定义要推送到仓库的镜像列表
-# Cloud Build 会自动推送这里列出的所有镜像
-images:
-- 'europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/base:latest'
-- 'europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/base:${SHORT_SHA}'
+# 步骤 3: 推送 base 镜像
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['push', 'europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/base:latest']
 
-# 超时设置
-timeout: '1200s'
+# 镜像构建完成后，清理掉复制过来的依赖文件，保持工作区干净
+- name: 'ubuntu'
+  args: ['rm', '-rf', 'local_deps']
