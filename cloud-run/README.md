@@ -4,6 +4,8 @@
 These are the code samples behind my Medium article [Run, Gateway, Run! &ndash; Algorithmic Trading the Serverless Way]. Main ingredients:
 
 * [Cloud Run]
+    
+    *   base 镜像中是基于IBcontroller 3.22， ibgateway 10.30 构建。
 * [IBC]
 * [IB's Python API]
 * [IB-insync]
