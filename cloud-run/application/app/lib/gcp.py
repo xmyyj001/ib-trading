@@ -14,12 +14,20 @@ from google.cloud import bigquery, firestore_v1 as firestore, logging as gcp_log
 try:
     gcp_project_id = environ.get('PROJECT_ID')
     if not gcp_project_id:
-        import google.auth
-        _, gcp_project_id = google.auth.default()
+        # 在非 Cloud Run/Build 环境中，尝试从默认配置获取
+        try:
+            import google.auth
+            _, gcp_project_id = google.auth.default()
+        except google.auth.exceptions.DefaultCredentialsError:
+            gcp_project_id = None # 如果都找不到，就让它为空
     
-    gcp_logging_client = gcp_logging.Client(project=gcp_project_id)
-    handler = gcp_logging_client.get_default_handler()
-    logger = logging.getLogger('cloudLogger')
+    # 只有在能确定 project_id 时才使用 Cloud Logging，否则回退到标准输出
+    if gcp_project_id:
+        gcp_logging_client = gcp_logging.Client(project=gcp_project_id)
+        handler = gcp_logging_client.get_default_handler()
+        logger = logging.getLogger('cloudLogger')
+    else:
+        raise RuntimeError("Could not determine GCP Project ID for logging.")
 except Exception:
     handler = logging.StreamHandler()
     logger = logging.getLogger(__name__)
@@ -84,8 +92,6 @@ class GcpModule:
         except json.decoder.JSONDecodeError:
             return secret
 
-
-
     def query_bigquery(self, query, query_parameters=None, job_config=None, return_type='DataFrame', **kwargs):
         """
         Queries data form BigQuery.
@@ -131,7 +137,8 @@ class GcpModule:
 
         try:
             self._logging.debug(f'Querying BigQuery with parameters {job_config.query_parameters}...')
-            job = self._bq.query(query, job_config=job_config)
+            job = self.bq.query(query, job_config=job_config)  # 需要确认的部分 job = self._bq.query(query, job_config=job_config) 
+            
         except Exception as e:
             self._logging.error(f'BigQuery error: {e}')
             raise e
