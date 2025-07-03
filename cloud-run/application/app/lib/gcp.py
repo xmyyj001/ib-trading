@@ -1,5 +1,5 @@
 # ===================================================================
-# == FINAL DEFINITIVE VERSION (GOLDEN CODE): gcp.py
+# == FINAL GOLDEN CODE: gcp.py
 # == Implements lazy initialization for all GCP clients.
 # ===================================================================
 
@@ -9,26 +9,19 @@ from os import environ
 
 from google.cloud import bigquery, firestore_v1 as firestore, logging as gcp_logging, secretmanager_v1 as secretmanager
 
-# set up Cloud Logging
-# 关键修复：延迟 logging client 的初始化，直到它被真正需要
+# Set up Cloud Logging robustly
 try:
     gcp_project_id = environ.get('PROJECT_ID')
     if not gcp_project_id:
-        # 在非 Cloud Run/Build 环境中，尝试从默认配置获取
-        try:
-            import google.auth
-            _, gcp_project_id = google.auth.default()
-        except google.auth.exceptions.DefaultCredentialsError:
-            gcp_project_id = None # 如果都找不到，就让它为空
+        # This will work in most GCP environments like Cloud Run, Cloud Functions
+        import google.auth
+        _, gcp_project_id = google.auth.default()
     
-    # 只有在能确定 project_id 时才使用 Cloud Logging，否则回退到标准输出
-    if gcp_project_id:
-        gcp_logging_client = gcp_logging.Client(project=gcp_project_id)
-        handler = gcp_logging_client.get_default_handler()
-        logger = logging.getLogger('cloudLogger')
-    else:
-        raise RuntimeError("Could not determine GCP Project ID for logging.")
-except Exception:
+    gcp_logging_client = gcp_logging.Client(project=gcp_project_id)
+    handler = gcp_logging_client.get_default_handler()
+    logger = logging.getLogger('cloudLogger')
+except (ImportError, google.auth.exceptions.DefaultCredentialsError, Exception):
+    # Fallback for local development or environments without default credentials
     handler = logging.StreamHandler()
     logger = logging.getLogger(__name__)
 
@@ -38,9 +31,13 @@ logger.propagate = False
 
 
 class GcpModule:
+    """
+    A module for interacting with Google Cloud Platform services.
+    It uses lazy initialization for its clients to ensure they are
+    created only when needed and with the correct project ID.
+    """
 
     def __init__(self):
-        # --- 关键修复：不再在类加载时创建实例，而是在构造函数中 ---
         self._project_id = environ.get('PROJECT_ID')
         if not self._project_id:
             try:
@@ -50,7 +47,7 @@ class GcpModule:
                 logger.warning("PROJECT_ID not found in environment or default credentials.")
                 self._project_id = None
         
-        # 将客户端实例的创建延迟到属性被第一次访问时
+        # Clients are initialized to None and will be created on first access.
         self.__bq = None
         self.__db = None
         self.__sm = None
@@ -86,6 +83,9 @@ class GcpModule:
         return logger
 
     def get_secret(self, secret_name):
+        """
+        Fetches secrets from Secret Manager.
+        """
         secret = self.sm.access_secret_version(name=secret_name).payload.data.decode()
         try:
             return json.loads(secret)
@@ -95,20 +95,12 @@ class GcpModule:
     def query_bigquery(self, query, query_parameters=None, job_config=None, return_type='DataFrame', **kwargs):
         """
         Queries data form BigQuery.
-
-        :param query: query string (str)
-        :param query_parameters: parameters for parametrised query (dict)
-        :param job_config: query job configuration (bigquery.job.QueryJobConfig)
-        :param return_type: type of the return object (e.g. 'DataFrame') (str)
-        :param kwargs: additional arguments for the fetch method
-        :return: data (type depending on return_type, defaults to list of tuple)
         """
         query_parameters = query_parameters or {}
         job_config = job_config or bigquery.job.QueryJobConfig()
 
         def _create_query_parameters(params):
             parameter_types = {
-                # dict: bigquery.StructQueryParameter,
                 list: bigquery.ArrayQueryParameter
             }
             data_types = {
@@ -117,28 +109,25 @@ class GcpModule:
                 float: 'FLOAT64',
                 str: 'STRING'
             }
-
-            query_parameters = []
+            bq_params = []
             for k, v in params.items():
                 ptype, dtype = type(v), type(v[0] if isinstance(v, list) else v)
-                if dtype in data_types.keys():
-                    query_parameters.append(
+                if dtype in data_types:
+                    bq_params.append(
                         parameter_types.get(ptype, bigquery.ScalarQueryParameter)(k, data_types[dtype], v))
                 else:
                     self._logging.warning(f'No BigQuery query parameter type for {v.__class__.__name__} available')
-
-            return query_parameters
+            return bq_params
 
         try:
             job_config.query_parameters = _create_query_parameters(query_parameters)
         except Exception as e:
             self._logging.error(e)
-            raise Exception('Query parameter error')
+            raise Exception('Query parameter error') from e
 
         try:
             self._logging.debug(f'Querying BigQuery with parameters {job_config.query_parameters}...')
-            job = self.bq.query(query, job_config=job_config)  # 需要确认的部分 job = self._bq.query(query, job_config=job_config) 
-            
+            job = self.bq.query(query, job_config=job_config)
         except Exception as e:
             self._logging.error(f'BigQuery error: {e}')
             raise e

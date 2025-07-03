@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # =======================================================
-# == FINAL DEFINITIVE VERSION (GOLDEN SCRIPT): gatewaystart.sh
+# == FINAL GOLDEN SCRIPT: gatewaystart.sh
 # =======================================================
 
 set -e

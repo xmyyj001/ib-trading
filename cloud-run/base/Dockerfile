@@ -1,6 +1,5 @@
 # ===================================================================
-# == FINAL DEFINITIVE VERSION (GOLDEN IMAGE): cloud-run/base/Dockerfile
-# == Based on 100% verified interactive debugging results.
+# == FINAL GOLDEN VERSION: cloud-run/base/Dockerfile
 # ===================================================================
 FROM python:3.9-slim
 
