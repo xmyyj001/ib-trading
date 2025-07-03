@@ -1,11 +1,11 @@
 # ===================================================================
-# == CORRECTED & ROBUST: cloud-run/application/cloudbuild.yaml
-# == Injects secrets as environment variables for the gateway.
+# == CORRECTED & ROBUST v2: cloud-run/application/cloudbuild.yaml
+# == Uses modern, publicly accessible image paths to fix permission errors.
 # ===================================================================
 
 steps:
-  # 步骤 0: Pull-Latest-Base
-  - name: 'gcr.io/cloud-builders/docker'
+  # 步骤 0: Pull-Latest-Base (使用 gcr.io/cloud-builders/docker 是可以的，但为了统一，我们也换掉)
+  - name: 'gcr.io/cloud-builders/docker' # 这个通常没问题，但为了保险可以换成下面的
     id: 'Pull-Latest-Base'
     args: ['pull', 'europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/base:latest']
 
@@ -31,7 +31,7 @@ steps:
 
   # --- 检测和初始化步骤 ---
 
-  # 步骤 4: 运行依赖安全检查 (允许继续，即使发现漏洞)
+  # 步骤 4: 运行依赖安全检查
   - name: "gcr.io/cloud-builders/docker"
     id: "Safety-Check"
     args:
@@ -45,14 +45,16 @@ steps:
     waitFor: ['Push-Application']
 
   # 步骤 5: 运行单元测试 (当前跳过)
-  - name: "gcr.io/google/cloud-sdk:slim"
+  # 关键修复：将 gcr.io/google/cloud-sdk:slim 替换为 google/cloud-sdk:slim
+  # Docker Hub 上的官方镜像，Cloud Build 默认有权限拉取
+  - name: "google/cloud-sdk:slim"
     id: "Unit-Tests"
     entrypoint: "bash"
     args: ["-c", "echo '--- SKIPPING UNIT TESTS ---' && exit 0"]
     waitFor: ['Push-Application']
 
   # 步骤 6: 初始化 Firestore 配置
-  - name: 'python:3.9-slim'
+  - name: 'python:3.9-slim' # 这个来自 Docker Hub，没问题
     id: "Initialize-Firestore"
     entrypoint: 'bash'
     args:
@@ -64,7 +66,8 @@ steps:
     waitFor: ['Push-Application']
 
   # 步骤 7: 运行集成测试 (当前跳过)
-  - name: "gcr.io/google/cloud-sdk:slim"
+  # 关键修复：同样替换镜像地址
+  - name: "google/cloud-sdk:slim"
     id: "Integration-Tests"
     entrypoint: "bash"
     args: ["-c", "echo '--- SKIPPING INTEGRATION TESTS ---' && exit 0"]
@@ -73,7 +76,8 @@ steps:
   # --- 部署步骤 ---
 
   # 步骤 8: 部署到 Cloud Run
-  - name: 'gcr.io/google/cloud-sdk'
+  # 关键修复：使用 google/cloud-sdk:slim 作为部署工具
+  - name: 'google/cloud-sdk:slim'
     id: 'Deploy-to-Cloud-Run'
     entrypoint: gcloud
     args:
@@ -95,10 +99,7 @@ steps:
       - '--service-account'
       - 'ib-trading@${PROJECT_ID}.iam.gserviceaccount.com'
       - '--no-allow-unauthenticated'
-      # 关键修复：将环境变量和 Secrets 分开设置
       - '--set-env-vars=PROJECT_ID=${PROJECT_ID},TRADING_MODE=${_TRADING_MODE},TWS_VERSION=1030'
-      # 关键修复：从 Secret Manager 安全地注入凭据作为环境变量
-      # 注意：您需要在 GCP Secret Manager 中创建名为 'ib-username' 和 'ib-password' 的 Secret
       - '--set-secrets=IB_USERNAME=ib-username:latest,IB_PASSWORD=ib-password:latest'
     waitFor:
       - 'Safety-Check'
