@@ -11,7 +11,7 @@ FROM ${BASE_IMAGE_URL}
 WORKDIR /home/app
 # 2.1. 创建 ibc 目录并复制 ibgateway.vmoptions 文件
 # We create a symbolic link here so the script can find it.
-RUN ln -s /opt/ibc/ibgateway.vmoptions .
+#   RUN ln -s /opt/ibc/ibgateway.vmoptions .
 
 # 3. 复制并安装依赖 (包含 gunicorn)
 COPY app/requirements.txt .

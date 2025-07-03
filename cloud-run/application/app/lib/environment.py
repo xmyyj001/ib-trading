@@ -1,6 +1,6 @@
 # ===================================================================
-# == FINAL GOLDEN CODE: environment.py
-# == Correctly inherits from the refactored GcpModule.
+# == FINAL CORRECTED CODE: environment.py
+# == Removes secret fetching logic to align with new architecture.
 # ===================================================================
 
 import json
@@ -20,40 +20,27 @@ class Environment:
         ENV_VARS = ['K_REVISION', 'PROJECT_ID']
 
         def __init__(self, trading_mode, ibc_config):
-            # 关键修复：必须先调用父类的构造函数
+            # 关键：必须先调用父类的构造函数
             super().__init__()
             
             self._env = {k: v for k, v in environ.items() if k in self.ENV_VARS}
             self._trading_mode = trading_mode
             
-            # --- 凭据获取逻辑 ---
-            self._logging.info(f"Fetching credentials from a single secret named '{self._trading_mode}'...")
-            secrets = {}
-            try:
-                # 使用 GcpModule 提供的、延迟初始化的 Secret Manager 客户端
-                # self.sm 会在第一次被访问时才创建实例
-                secret_name = f"projects/{self._project_id}/secrets/{self._trading_mode}/versions/latest"
-                response = self.sm.access_secret_version(request={"name": secret_name})
-                credentials = json.loads(response.payload.data.decode("UTF-8"))
-                secrets['userid'] = credentials.get('userid')
-                secrets['password'] = credentials.get('password')
-
-                if not secrets.get('userid') or not secrets.get('password'):
-                    raise ValueError("JSON content from secret is missing 'userid' or 'password' keys.")
-
-                self._logging.info(f"Successfully fetched and parsed credentials from secret '{self._trading_mode}'.")
-            except Exception as e:
-                self._logging.critical(f"FATAL: Could not fetch credentials from secret '{self._trading_mode}'. Error: {e}")
-                raise ValueError("Failed to load IB credentials from Secret Manager.") from e
+            # --- 凭据获取逻辑 (已移除) ---
+            # IB Gateway 的凭据现在通过环境变量在容器启动时由 gatewaystart.sh 使用。
+            # Python 应用不再需要处理登录凭据。
+            self._logging.info("IB Gateway authentication is handled by the startup script using environment variables.")
 
             # --- 配置合并 ---
-            config = {**ibc_config, 'tradingMode': self._trading_mode, **secrets}
+            # 我们不再需要合并 'secrets'，因为登录已在外部处理。
+            config = {**ibc_config, 'tradingMode': self._trading_mode}
+            
             # 从环境变量中获取路径，如果不存在则为 None
             config['ibcPath'] = environ.get('IBC_PATH')
             config['twsPath'] = environ.get('TWS_PATH')
             config['ibcIni'] = environ.get('IBC_INI')
             
-            self._logging.debug({**config, 'password': 'xxx'})
+            self._logging.debug(f"IBGW config (password omitted as it's handled externally): {config}")
 
             # --- Firestore 调用 ---
             # self.db 会在第一次被访问时才创建实例，并使用正确的 project_id
@@ -70,6 +57,7 @@ class Environment:
             self._logging.info("Successfully loaded configuration from Firestore.")
 
             # --- IB Gateway 实例化 ---
+            # IBGW 将使用默认设置 (host='127.0.0.1', port=4002) 连接到已经运行和登录的 Gateway。
             self._ibgw = IBGW(config)
             util.logToConsole(logging.ERROR)
 
