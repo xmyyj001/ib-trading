@@ -244,13 +244,3 @@ graph TD
             --role="roles/run.invoker" \
             --region="asia-east1"
         ```
-
-    *   使用身份验证的 curl 请求测试：
-
-    *    一旦您授予了权限，您可以使用 gcloud auth print-identity-token 命令获取一个身份令牌，并将其包含在 curl 请求的 Authorization 头中。
-    *   运行以下命令来测试 summary 意图：
-
-        ```bash
-        TOKEN=$(gcloud auth print-identity-token)
-        curl -X GET -H "Authorization: Bearer ${TOKEN}" "https://ib-paper-599151217267.asia-east1.run.app/summary"
-        ```

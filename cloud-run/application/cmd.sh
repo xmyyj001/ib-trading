@@ -4,6 +4,9 @@
 # =======================================================
 set -e
 
+# 确保 PROJECT_ID 环境变量在 Python 应用程序中可用
+export PROJECT_ID="${PROJECT_ID}"
+
 echo ">>> Starting Xvfb on display :0..."
 Xvfb :0 -screen 0 1024x768x24 &
 export DISPLAY=:0
