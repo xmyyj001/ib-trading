@@ -22,7 +22,8 @@ config_docs = {
                 "strategies": {
                     "dummy": 1.0 # dummy 策略的风险敞口，例如 1.0 表示 100%
                 }
-            }
+            },
+            "retryCheckMinutes": 5 # 新增 retryCheckMinutes 配置
         },
         "paper": {
             "strategy_enabled": True,
