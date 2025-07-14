@@ -16,7 +16,13 @@ config_docs = {
         "common": {
             "default_setting": "hello_world",
             "risk_limit": 0.01,
-            "marketDataType": 3  # <-- 关键修复：添加缺失的配置项 (1=Live, 2=Frozen, 3=Delayed)
+            "marketDataType": 3,  # <-- 关键修复：添加缺失的配置项 (1=Live, 2=Frozen, 3=Delayed)
+            "exposure": { # 新增 exposure 配置
+                "overall": 1.0, # 整体风险敞口，例如 1.0 表示 100%
+                "strategies": {
+                    "dummy": 1.0 # dummy 策略的风险敞口，例如 1.0 表示 100%
+                }
+            }
         },
         "paper": {
             "strategy_enabled": True,
