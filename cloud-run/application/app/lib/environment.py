@@ -82,9 +82,30 @@ class Environment:
             return self._trading_mode
 
         def get_account_values(self, account, rows=('NetLiquidation', 'CashBalance', 'MaintMarginReq')):
-            # This method's logic remains the same
             account_summary = {}
-            # ... (rest of the method)
+            
+            # 直接获取账户值，ib_insync 的 accountValues 是异步的，但通常会立即返回一个列表
+            # 如果数据为空，则可能是 IB Gateway 尚未完全同步或连接问题
+            account_value = self._ibgw.accountValues(account)
+            self._logging.debug(f"Raw account_value from IBGW: {account_value}") # 添加调试日志
+
+            if not account_value: # 如果 account_value 为空，则直接返回空字典
+                self._logging.warning(f"IB Gateway returned empty account_value for account {account}. Returning empty summary.")
+                return account_summary # 返回空字典，避免 KeyError
+
+            try:
+                account_values = util.df(account_value).set_index(['tag', 'currency']).loc[list(rows), 'value']
+                self._logging.debug(f"Processed account_values DataFrame: {account_values}") # 添加调试日志
+            except KeyError as e:
+                self._logging.error(f"KeyError during account_values processing: {e}. Raw data: {account_value}")
+                raise e
+            
+            for (k, c), v in account_values.items():
+                if c != 'BASE':
+                    if k in account_summary:
+                        account_summary[k][c] = float(v)
+                    else:
+                        account_summary[k] = {c: float(v)}
             return account_summary
 
     # --- Singleton Wrapper (remains unchanged) ---
