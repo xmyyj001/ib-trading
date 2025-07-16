@@ -1,6 +1,6 @@
 from random import randint
 
-from lib.trading import Contract # 更改为导入 Contract
+from lib.trading import Contract, InstrumentSet # 更改为导入 Contract 和 InstrumentSet
 from strategies.strategy import Strategy
 
 
