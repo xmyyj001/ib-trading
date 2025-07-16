@@ -1,6 +1,6 @@
 from random import randint
 
-from lib.trading import Future
+from lib.trading import Contract # 更改为导入 Contract
 from strategies.strategy import Strategy
 
 
@@ -10,18 +10,32 @@ class Dummy(Strategy):
         super().__init__(**kwargs)
 
     def _get_signals(self):
+        # 确保 _instruments['spy'] 存在且不为空
+        if not self._instruments.get('spy') or not self._instruments['spy'].constituents:
+            self._env.logging.warning("No valid 'spy' contracts found. Skipping signal generation.")
+            self._signals = {}
+            return
+
+        # 使用 SPY 的合约 ID
         allocation = {
-            self._instruments['mnq'][0].contract.conId: randint(-1, 1)
+            self._instruments['spy'][0].contract.conId: randint(-1, 1)
         }
         self._env.logging.debug(f'Allocation: {allocation}')
         self._signals = allocation
         # register allocation contracts so that they don't have to be created again
-        self._register_contracts(self._instruments['mnq'][0])
+        self._register_contracts(self._instruments['spy'][0]) # 更改为 'spy'
 
     def _setup(self):
+        # 更改为获取 SPY ETF 合约
         self._instruments = {
-            'mnq': Future.get_contract_series(1, 'MNQ', rollover_days_before_expiry=2)
+            'spy': InstrumentSet(Contract(symbol='SPY', exchange='ARCA', currency='USD', secType='ETF')) # 使用 Contract 和 ETF 类型
         }
+        # 确保合约详情已获取
+        if self._instruments['spy'].constituents:
+            self._instruments['spy'].constituents[0].get_contract_details()
+            if not self._instruments['spy'].constituents[0].contract:
+                self._env.logging.error("Failed to get contract details for SPY. Check IB Gateway connection and market data permissions.")
+                self._instruments['spy'] = None # 标记为无效，防止后续错误
 
 
 if __name__ == '__main__':

@@ -89,7 +89,11 @@ class Future(Instrument):
     def get_contract_series(cls, n, ticker, rollover_days_before_expiry=1):
         logging = GcpModule.get_logger()
 
-        contract_years = [str(datetime.now().year + i)[-1] for i in range(2)]
+        # 调整合约年份生成逻辑，获取当前年份和未来两年的合约
+        # 确保能够找到活跃的、未来的合约
+        current_year = datetime.now().year
+        contract_years = [str(current_year + i)[-1] for i in range(3)] # 获取当前年份和未来两年
+
         contract_symbols = [ticker + m + y for y in contract_years for m in cls.EXPIRY_SCHEMES[cls.CONTRACT_SPECS[ticker]['expiry_scheme']]]
 
         logging.info(f"Requesting contract for {', '.join(contract_symbols)}...")
@@ -98,6 +102,11 @@ class Future(Instrument):
                                                     currency=cls.CONTRACT_SPECS[ticker]['currency'])
                                                 for s in contract_symbols]
                                     if f.contract is not None and f.contract.lastTradeDateOrContractMonth > (datetime.now() + timedelta(days=rollover_days_before_expiry)).strftime('%Y%m%d')])
+        
+        # 确保返回的合约数量至少为 n，如果不足则可能需要调整 rollover_days_before_expiry 或合约生成逻辑
+        if len(contracts) < n:
+            logging.warning(f"Only {len(contracts)} contracts found, but {n} were requested. Consider adjusting rollover_days_before_expiry or contract generation logic.")
+
         return contracts[:n]
 
 
