@@ -1,6 +1,7 @@
 from random import randint
 
-from lib.trading import Contract, InstrumentSet # 更改为导入 Contract 和 InstrumentSet
+from ib_insync import Stock # 导入 Stock 类
+from lib.trading import InstrumentSet # 仅导入 InstrumentSet
 from strategies.strategy import Strategy
 
 
@@ -28,7 +29,7 @@ class Dummy(Strategy):
     def _setup(self):
         # 更改为获取 SPY ETF 合约
         self._instruments = {
-            'spy': InstrumentSet(Contract(symbol='SPY', exchange='SMART', currency='USD', secType='ETF')) # 更改 exchange 为 SMART
+            'spy': InstrumentSet(Stock('SPY', 'ARCA', 'USD')) # 使用 Stock 类
         }
         # 确保合约详情已获取
         if self._instruments['spy'].constituents:
