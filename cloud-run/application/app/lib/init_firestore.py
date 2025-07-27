@@ -22,7 +22,6 @@ config_docs = {
                 "strategies": {
                     "dummy": 1.0, # dummy 策略的风险敞口，例如 1.0 表示 100%
                     "spymacdvixy": 1.0 # Exposure for the spymacdvixy strategy
-                    "spymacdvixy": 1.0 # 新增 spymacdvixy 策略的风险敞口
                 }
             },
             "retryCheckMinutes": 5 # 新增 retryCheckMinutes 配置
