@@ -5,7 +5,7 @@ from ib_insync import MarketOrder, TagValue
 
 from intents.intent import Intent
 from lib.trading import Trade
-from strategies import STRATEGIES
+from strategies import STRATEGIES # This will now be dynamically populated
 
 
 class Allocation(Intent):
