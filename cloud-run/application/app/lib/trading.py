@@ -115,6 +115,11 @@ class Index(Instrument):
     IB_CLS = ib_insync.Index
 
 
+class Stock(Instrument):
+
+    IB_CLS = ib_insync.Stock
+
+
 class InstrumentSet:
 
     def __init__(self, *args):

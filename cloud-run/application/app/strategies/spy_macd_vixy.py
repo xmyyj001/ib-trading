@@ -1,8 +1,8 @@
 
 import pandas as pd
-from ib_insync import Stock, util
+from ib_insync import util
 from strategies.strategy import Strategy
-from lib.trading import InstrumentSet
+from lib.trading import Stock, InstrumentSet
 
 class SpyMacdVixy(Strategy):
     """
