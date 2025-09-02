@@ -5,6 +5,7 @@
 
 from datetime import datetime
 import falcon
+import falcon.asgi
 import json
 import logging
 from os import environ
@@ -95,5 +96,5 @@ class Main:
         response.text = json.dumps(result) + '\n'
 
 # Instantiate Falcon App
-app = falcon.App()
+app = falcon.asgi.App()
 app.add_route('/{intent}', Main())
