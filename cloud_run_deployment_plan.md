@@ -225,6 +225,10 @@ graph TD
 
         # 测试 allocation 意图 (示例，根据实际需求修改请求体)
         curl -X POST -H "Content-Type: application/json" -H "Authorization: Bearer ${TOKEN}" -d '{"dryRun": true, "strategies": ["dummy"]}' "${SERVICE_URL}/allocation"
+
+        # 测试 allocation 意图 `spymacdvixy`策略：
+        curl -X POST -H "Content-Type: application/json" -H "Authorization: Bearer ${TOKEN}" -d '{"dryRun": true, "strategies": ["spymacdvixy"]}' "${SERVICE_URL}/allocation"
+
         ```
         将 `YOUR_CLOUD_RUN_SERVICE_URL` 替换为你的 Cloud Run 服务的实际 URL。
     *   检查 Cloud Run 服务的日志，以确保应用程序正常启动并运行，并且交易逻辑按预期执行。
