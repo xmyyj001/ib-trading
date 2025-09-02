@@ -17,7 +17,7 @@ steps:
       - '--build-arg'
       - 'BASE_IMAGE_URL=europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/base:latest'
       - '--tag'
-      - 'europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:$COMMIT_SHA'
+      - 'europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG}'
       - 'cloud-run/application'
       - '--file'
       - 'cloud-run/application/Dockerfile'
@@ -26,7 +26,7 @@ steps:
   # 步骤 2: Push-Application
   - name: 'gcr.io/cloud-builders/docker'
     id: 'Push-Application'
-    args: ['push', 'europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:$COMMIT_SHA']
+    args: ['push', 'europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG}']
     waitFor: ['Build-Application']
 
   # --- 检测和初始化步骤 ---
@@ -39,7 +39,7 @@ steps:
       - "--rm"
       - "--entrypoint"
       - "bash"
-      - "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:$COMMIT_SHA"
+      - "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG}"
       - "-c"
       - "pip install --quiet safety && safety check --bare || true"
     waitFor: ['Push-Application']
@@ -85,7 +85,7 @@ steps:
       - 'deploy'
       - 'ib-${_TRADING_MODE}'
       - '--image'
-      - 'europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:$COMMIT_SHA'
+      - 'europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG}'
       - '--region'
       - '${_GCP_REGION}'
       - '--platform'
@@ -110,5 +110,6 @@ steps:
 substitutions:
   _GCP_REGION: asia-east1
   _TRADING_MODE: paper
+  _MY_IMAGE_TAG: "latest"
 
 timeout: "1800s"
