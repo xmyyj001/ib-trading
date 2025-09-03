@@ -63,7 +63,10 @@ class Main:
         await self._on_request(request, response, intent)
 
     async def on_post(self, request, response, intent):
-        body = json.load(request.stream) if request.content_length else {}
+        body = {}
+        if request.content_length:
+            body_bytes = await request.stream.read()
+            body = json.loads(body_bytes)
         await self._on_request(request, response, intent, **body)
 
     @staticmethod
