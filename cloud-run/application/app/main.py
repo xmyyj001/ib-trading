@@ -59,15 +59,15 @@ INTENTS = {
 
 class Main:
     """Main Falcon route handler."""
-    def on_get(self, request, response, intent):
-        self._on_request(request, response, intent)
+    async def on_get(self, request, response, intent):
+        await self._on_request(request, response, intent)
 
-    def on_post(self, request, response, intent):
+    async def on_post(self, request, response, intent):
         body = json.load(request.stream) if request.content_length else {}
-        self._on_request(request, response, intent, **body)
+        await self._on_request(request, response, intent, **body)
 
     @staticmethod
-    def _on_request(_, response, intent, **kwargs):
+    async def _on_request(_, response, intent, **kwargs):
         """Handles the HTTP request by dispatching to the correct intent."""
         try:
             if intent is None or intent not in INTENTS.keys():
