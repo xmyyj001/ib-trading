@@ -1,4 +1,4 @@
-# Google Cloud Run 部署计划（修订版）
+# Google Cloud Run 部署计划 (最终详尽说明版)
 
 ## 1. 项目架构分析
 
@@ -9,172 +9,233 @@
 
 当部署时，`application` 镜像在一个容器内同时运行 IB Gateway 进程和 Python 应用。两者通过内部网络 (`127.0.0.1`) 通信。
 
-## 2. 核心部署流程
+## 2. 部署流程 (通过 `cloudbuild.yaml`)
 
-部署流程由 `cloud-run/application/cloudbuild.yaml` 文件全自动定义，主要步骤包括：构建镜像、运行测试、部署到 Cloud Run。
+`cloudbuild.yaml` 文件定义了使用 Google Cloud Build 部署应用程序的自动化流程，主要步骤包括：构建镜像、运行测试、部署到 Cloud Run。
 
-以下是手动执行首次部署及相关设置的详细步骤。
+## 3. 部署到 Google Cloud Run 的详细步骤
 
-### 步骤一：环境与权限准备
+**重要提示**: 在开始以下步骤之前，请确保您已经创建并填写了 `deployment_vars.sh` 文件，然后运行以下命令加载所有必需的环境变量：
 
-1.  **登录 gcloud CLI**
+```bash
+# 此命令会读取 deployment_vars.sh 文件，并将其中的 export 变量设置到您当前的终端会话中。
+source deployment_vars.sh
+```
+
+加载后，本指南中的所有命令都可以直接复制和粘贴来执行。
+
+```mermaid
+graph TD
+    A[开始] --> B[加载部署变量];
+    B --> C[配置gcloud CLI];
+    C --> D[启用必要的Google Cloud API];
+    D --> E[创建Cloud Run服务账号并授予权限];
+    E --> F[创建并配置Google Secret Manager Secrets];
+    F --> G[构建cloud-run/base镜像];
+    G --> H[推送cloud-run/base镜像到Artifact Registry];
+    H --> I[运行Cloud Build部署应用];
+    I --> J[为Cloud Run服务挂载Secrets];
+    J --> K[验证Cloud Run服务];
+    K --> L[测试应用程序];
+    L --> M[配置Cloud Scheduler作业];
+    L --> N[完成];
+```
+
+### 步骤 1: 环境准备
+
+*   **登录 gcloud CLI 并设置项目：**
+    *   **目的**: 验证您的用户身份，并指定后续所有gcloud命令在哪个GCP项目中执行。
     ```bash
     gcloud auth login
-    gcloud config set project [YOUR_PROJECT_ID]
+    gcloud config set project ${PROJECT_ID}
     ```
 
-2.  **启用必要的 Google Cloud API**
+*   **启用必要的 Google Cloud API：**
+    *   **目的**: 在您的GCP项目中“激活”本次部署所需用到的各项云服务。
     ```bash
     gcloud services enable cloudbuild.googleapis.com run.googleapis.com artifactregistry.googleapis.com iam.googleapis.com secretmanager.googleapis.com
     ```
 
-3.  **创建并授权服务账号**
-    您的 Cloud Run 服务需要一个专用的身份（服务账号）来运行。
+*   **创建 Cloud Run 服务账号并授予权限：**
+    *   **目的**: 创建一个专用的“机器人”账号 (`Service Account`)，您的Cloud Run服务将使用这个身份来访问其他GCP资源，而不是使用您的个人账户，这是一种安全最佳实践。
     ```bash
-    # 创建服务账号
-    gcloud iam service-accounts create ib-trading --display-name="IB Trading Service Account"
+    # 创建一个名为 ib-trading 的服务账号
+    gcloud iam service-accounts create ${SERVICE_NAME_BASE} --display-name="IB Trading Service Account"
 
-    # 授予部署和运行服务所需的最小权限
-    gcloud projects add-iam-policy-binding [YOUR_PROJECT_ID] \
-        --member="serviceAccount:ib-trading@[YOUR_PROJECT_ID].iam.gserviceaccount.com" \
-        --role="roles/run.invoker"
-    gcloud projects add-iam-policy-binding [YOUR_PROJECT_ID] \
-        --member="serviceAccount:ib-trading@[YOUR_PROJECT_ID].iam.gserviceaccount.com" \
-        --role="roles/storage.objectUser" # Cloud Build 需要访问GCS存储桶
-
-    # 授予服务账号访问Secret的权限
-    gcloud projects add-iam-policy-binding [YOUR_PROJECT_ID] \
-        --member="serviceAccount:ib-trading@[YOUR_PROJECT_ID].iam.gserviceaccount.com" \
-        --role="roles/secretmanager.secretAccessor"
+    # 为这个“机器人”账号授予三个关键权限：
+    # 1. roles/run.admin: 管理Cloud Run服务的权限。
+    # 2. roles/iam.serviceAccountUser: 作为服务账号被其他服务使用的权限。
+    # 3. roles/secretmanager.secretAccessor: 从Secret Manager中读取密钥的权限。
+    gcloud projects add-iam-policy-binding ${PROJECT_ID} --member="serviceAccount:${SERVICE_ACCOUNT_EMAIL}" --role="roles/run.admin"
+gcloud projects add-iam-policy-binding ${PROJECT_ID} --member="serviceAccount:${SERVICE_ACCOUNT_EMAIL}" --role="roles/iam.serviceAccountUser"
+gcloud projects add-iam-policy-binding ${PROJECT_ID} --member="serviceAccount:${SERVICE_ACCOUNT_EMAIL}" --role="roles/secretmanager.secretAccessor"
     ```
 
-### 步骤二：存储IB凭据 (使用 Secret Manager)
+### 步骤 2: 创建并配置 Secret Manager
 
-我们使用 Secret Manager 来安全地存储您的 IB 用户名和密码。
+*   **目的**: 创建一个云端的“保险库”，用于安全地存储您的IB用户名和密码，避免硬编码在代码中。
 
-1.  **创建 Secret**
-    将 `[YOUR_SECRET_NAME]` 替换为您选择的名称 (例如 `ib-paper-credentials`)。
-    ```bash
-    gcloud secrets create [YOUR_SECRET_NAME] --replication-policy="automatic"
-    ```
+```bash
+# 创建一个名为 ib-paper-credentials (或您在vars文件中定义的名称) 的Secret“保险库”。
+gcloud secrets create ${SECRET_NAME} --replication-policy="automatic" --project="${PROJECT_ID}"
 
-2.  **添加 Secret 内容**
-    将 `[USER_ID]` 和 `[PASSWORD]` 替换为您的真实凭据。
-    ```bash
-    printf '{"userid": "[USER_ID]", "password": "[PASSWORD]"}' | gcloud secrets versions add [YOUR_SECRET_NAME] --data-file=-
-    ```
+# 将您的IB用户名和密码以JSON格式，存入该“保险库”的第一个版本中。
+printf '{"userid": "%s", "password": "%s"}' "${IB_USERNAME}" "${IB_PASSWORD}" | gcloud secrets versions add ${SECRET_NAME} --data-file=-
+```
 
-### 步骤三：构建与推送基础镜像
+### 步骤 3: 理解凭据处理架构 (重要概念)
 
-此步骤只需在您修改基础环境（如升级IBC或Java版本）后执行一次。
+此步骤仅为说明，无需操作。理解正确的凭据处理流程至关重要。
 
-1.  **创建 Artifact Registry 仓库** (如果尚未创建)
-    ```bash
-    gcloud artifacts repositories create cloud-run-repo --repository-format=docker --location=[YOUR_GCP_REGION]
-    ```
+当前的架构更为安全和健壮。凭据的处理流程如下：
+1.  我们将 Secret Manager 中的凭据作为**环境变量**安全地挂载到 Cloud Run 容器中 (见步骤8)。
+2.  容器启动时运行的 `gatewaystart.sh` 脚本会读取这些环境变量 (`IB_USER`, `IB_PASSWORD`)。
+3.  `gatewaystart.sh` 使用这些凭据来登录 IB Gateway。
+4.  Python 应用启动时，只需连接到一个**已经完成登录**的本地 Gateway 即可，完全不接触任何密码。
 
-2.  **配置 Docker 认证**
-    ```bash
-    gcloud auth configure-docker [YOUR_GCP_REGION]-docker.pkg.dev
-    ```
+### 步骤 4: 构建基础镜像 (`cloud-run/base`)
 
-3.  **构建并推送**
-    ```bash
-    cd cloud-run/base
-    docker build -t [YOUR_GCP_REGION]-docker.pkg.dev/[YOUR_PROJECT_ID]/cloud-run-repo/base:latest .
-    docker push [YOUR_GCP_REGION]-docker.pkg.dev/[YOUR_PROJECT_ID]/cloud-run-repo/base:latest
-    cd ../..
-    ```
+*   **目的**: 创建并上传一个包含IB Gateway运行环境的Docker基础镜像。此步骤只需在您想升级IB Gateway版本时执行一次。
 
-### 步骤四：部署应用并挂载凭据
+```bash
+# 在GCP上创建一个私有的Docker镜像仓库，名为cloud-run-repo。
+gcloud artifacts repositories create "${REPO_NAME}" --repository-format=docker --location="${GCP_REGION}"
 
-这是将您的应用部署到 Cloud Run 并安全连接凭据的关键一步。
+# 配置本地的Docker客户端，使其获得向您GCP私有仓库推送镜像的权限。
+gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev"
 
-1.  **通过 Cloud Build 部署**
-    推荐使用 Cloud Build 部署，它会自动执行测试。请确保 `cloud-run/application/cloudbuild.yaml` 中的 `_GCP_REGION` 和 `_TRADING_MODE` 等变量符合您的设定。
-    ```bash
-    gcloud builds submit --config cloud-run/application/cloudbuild.yaml .
-    ```
+# 进入base目录，构建镜像，并将其推送到您在GCP上的私有仓库中。
+cd cloud-run/base
+docker build -t "${DOCKER_REPO_URL}/base:latest" .
+docker push "${DOCKER_REPO_URL}/base:latest"
+cd ../..
+```
 
-2.  **为服务挂载 Secret (关键步骤)**
-    首次部署后，服务已经运行，但还无法登录 IB Gateway。我们需要通过更新服务，将 Secret Manager 中的凭据作为环境变量注入到容器中。
-    ```bash
-    gcloud run services update ib-paper --region [YOUR_GCP_REGION] \
-      --set-secrets="IB_USER=[YOUR_SECRET_NAME]:latest,IB_PASSWORD=[YOUR_SECRET_NAME]:latest"
-    ```
-    **工作原理**: 
-    *   `--set-secrets` 指令告诉 Cloud Run 创建两个环境变量：`IB_USER` 和 `IB_PASSWORD`。
-    *   `IB_USER` 的值将从 `[YOUR_SECRET_NAME]` 的最新版本中，解析 JSON 并提取 `userid` 字段。
-    *   `IB_PASSWORD` 的值将从同一个 Secret 中，解析 JSON 并提取 `password` 字段。
-    *   这两个环境变量随后会被容器内的 `gatewaystart.sh` 脚本读取，用于自动登录 IB Gateway。**Python 应用本身完全不接触明文密码**，实现了安全解耦。
+### 步骤 5: 配置 Cloud Build 触发器
 
-### 步骤五：验证与测试
+*   **目的**: 实现CI/CD，当您将代码推送到Git仓库时，自动触发后续的测试和部署流程。
+
+为了自动化部署，建议在 Google Cloud Console 中为你的代码仓库设置一个 Cloud Build 触发器。导航到 Cloud Build -> Triggers，点击 "CREATE TRIGGER" 并按照界面提示进行配置。
+
+### 步骤 6: 运行 Cloud Build 部署
+
+*   **目的**: 手动触发一次构建和部署流程，以部署您的交易应用。
+*   **说明**: 此命令会打包您当前目录的所有代码，上传到GCP，然后根据 `cloud-run/application/cloudbuild.yaml` 文件中定义的步骤，在云端执行构建、测试和部署。
+
+```bash
+# 确保您位于项目根目录 (ib-trading)
+gcloud builds submit --config cloud-run/application/cloudbuild.yaml .
+```
+
+### 步骤 7: 验证 Cloud Run 服务
+
+部署完成后，你可以在 Google Cloud Console 的 Cloud Run 页面查看你的服务状态。服务名称将是 `${CLOUD_RUN_SERVICE_NAME}`。确认服务状态为 "Ready"。
+
+### 步骤 8: 为Cloud Run服务挂载凭据 (关键安全步骤)
+
+*   **目的**: 将您存储在“保险库”(Secret Manager)中的IB凭据，安全地传递给正在运行的Cloud Run服务。
+
+首次部署后，服务已经运行，但还无法登录 IB Gateway。我们需要通过更新服务，将 Secret Manager 中的凭据作为环境变量注入到容器中。
+
+```bash
+# 此命令会更新您的Cloud Run服务，从Secret Manager中拉取凭据，并创建两个只有容器内部能看到的环境变量：IB_USER和IB_PASSWORD。
+gcloud run services update ${CLOUD_RUN_SERVICE_NAME} --region ${GCP_REGION} \
+  --set-secrets="IB_USER=${SECRET_NAME}:userid,IB_PASSWORD=${SECRET_NAME}:password"
+```
+
+### 步骤 9: 测试应用程序
+
+*   **目的**: 在配置好调度器之前，手动调用API，确保整个系统端到端运行通畅。
 
 1.  **获取服务 URL 和认证令牌**
+    *   **说明**: 第一个命令获取您服务的公开访问URL并存入变量。第二个命令为您的用户身份生成一个临时的、安全的访问令牌。
     ```bash
-    SERVICE_URL=$(gcloud run services describe ib-paper --region [YOUR_GCP_REGION] --format="value(status.url")
-    TOKEN=$(gcloud auth print-identity-token)
+    export SERVICE_URL=$(gcloud run services describe ${CLOUD_RUN_SERVICE_NAME} --region ${GCP_REGION} --format="value(status.url)")
+    export TOKEN=$(gcloud auth print-identity-token)
+    echo "Service URL set to: ${SERVICE_URL}"
     ```
 
 2.  **测试 `/summary` 端点**
+    *   **说明**: 使用curl工具，带上认证令牌，向`/summary`端点发送一个GET请求。这是最基础的连通性测试。
     ```bash
     curl -H "Authorization: Bearer ${TOKEN}" "${SERVICE_URL}/summary"
     ```
     如果看到返回的账户信息，则代表系统已成功连接并登录 IB Gateway。
 
+3.  **测试 `/allocation` 意图 (spymacdvixy策略)**
+    *   **说明**: 模拟一次策略执行，`dryRun: true` 参数确保它只进行计算而不真正下单。
+    ```bash
+    curl -X POST -H "Content-Type: application/json" -H "Authorization: Bearer ${TOKEN}" \
+    -d '{"dryRun": true, "strategies": ["spymacdvixy"]}' \
+    "${SERVICE_URL}/allocation"
+    ```
+
+### 步骤 10: 解决403禁止访问错误
+
+*   **目的**: 这是一个常见的故障排除步骤。如果测试时返回403错误，说明您当前的用户没有权限调用该服务。
+
+```bash
+# 此命令为您的个人GCP账户授予调用该Cloud Run服务的权限。
+gcloud run services add-iam-policy-binding ${CLOUD_RUN_SERVICE_NAME} \
+    --member="user:${USER_EMAIL_ACCOUNT}" \
+    --role="roles/run.invoker" \
+    --region="${GCP_REGION}"
+```
+
 ### 附录：生产场景的 Cloud Scheduler 配置
 
-以下是为场景A和场景D设置Cloud Scheduler作业所需的gcloud命令行指令。
-
-**注意**: 请将命令中的 `[SERVICE_URL]`、`[SERVICE_ACCOUNT_EMAIL]` 和 `[YOUR_PROJECT_ID]` 替换为您的实际值。
+*   **目的**: 创建云端的定时任务（Cron Job），以实现交易场景的完全自动化，无需人工触发。
 
 #### 场景 A: 日线级别的“波段/趋势交易者”
 
-此场景仅需一个作业，在每日收盘后触发策略分配。
+*   **说明**: 此命令创建一个名为 `eod-allocation-job` 的定时任务，它会在美东时间每个交易日下午4:15，安全地调用 `/allocation` 端点。
 
 ```bash
-gcloud scheduler jobs create http eod-allocation-job --project=[YOUR_PROJECT_ID] \
+gcloud scheduler jobs create http eod-allocation-job --project=${PROJECT_ID} \
     --schedule="15 16 * * 1-5" \
     --time-zone="America/New_York" \
     --uri="${SERVICE_URL}/allocation" \
     --http-method=POST \
-    --oidc-service-account-email="[SERVICE_ACCOUNT_EMAIL]" \
+    --oidc-service-account-email="${SERVICE_ACCOUNT_EMAIL}" \
     --message-body='{"strategies": ["spymacdvixy"]}' \
     --headers="Content-Type=application/json"
 ```
 
 #### 场景 D: “混合模式”日内交易者
 
-此场景需要三个独立的作业，分别负责开盘、盘中和收盘的逻辑。
+*   **说明**: 此场景需要创建三个独立的定时任务，分别负责开盘、盘中和收盘的自动化调用。
 
-**1. 作业一: 开盘交易**
+**1. 作业一: 开盘交易 (`open-allocation-job`)**
+*   **说明**: 在美东时间每个交易日上午9:30，调用 `/allocation` 端点执行开盘交易。
 ```bash
-gcloud scheduler jobs create http open-allocation-job --project=[YOUR_PROJECT_ID] \
+gcloud scheduler jobs create http open-allocation-job --project=${PROJECT_ID} \
     --schedule="30 9 * * 1-5" \
     --time-zone="America/New_York" \
     --uri="${SERVICE_URL}/allocation" \
     --http-method=POST \
-    --oidc-service-account-email="[SERVICE_ACCOUNT_EMAIL]" \
+    --oidc-service-account-email="${SERVICE_ACCOUNT_EMAIL}" \
     --message-body='{"strategies": ["spymacdvixy"]}' \
     --headers="Content-Type=application/json"
 ```
 
-**2. 作业二: 盘中风控**
+**2. 作业二: 盘中风控 (`midday-risk-check-job`)**
+*   **说明**: 在美东时间每个交易日下午1:00，调用 `/risk-check` 端点进行盘中风险检查。
 ```bash
-gcloud scheduler jobs create http midday-risk-check-job --project=[YOUR_PROJECT_ID] \
+gcloud scheduler jobs create http midday-risk-check-job --project=${PROJECT_ID} \
     --schedule="0 13 * * 1-5" \
     --time-zone="America/New_York" \
     --uri="${SERVICE_URL}/risk-check" \
     --http-method=POST \
-    --oidc-service-account-email="[SERVICE_ACCOUNT_EMAIL]"
+    --oidc-service-account-email="${SERVICE_ACCOUNT_EMAIL}"
 ```
 
-**3. 作业三: 收盘对账**
+**3. 作业三: 收盘对账 (`eod-reconciliation-job`)**
+*   **说明**: 在美东时间每个交易日下午3:55，调用 `/eod-check` 端点进行日终对账和清算检查。
 ```bash
-gcloud scheduler jobs create http eod-reconciliation-job --project=[YOUR_PROJECT_ID] \
+gcloud scheduler jobs create http eod-reconciliation-job --project=${PROJECT_ID} \
     --schedule="55 15 * * 1-5" \
     --time-zone="America/New_York" \
     --uri="${SERVICE_URL}/eod-check" \
     --http-method=POST \
-    --oidc-service-account-email="[SERVICE_ACCOUNT_EMAIL]"
+    --oidc-service-account-email="${SERVICE_ACCOUNT_EMAIL}"
 ```
