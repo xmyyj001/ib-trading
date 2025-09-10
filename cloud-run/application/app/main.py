@@ -73,6 +73,7 @@ class Main:
     @staticmethod
     async def _on_request(_, response, intent, **kwargs):
         """Handles the HTTP request by dispatching to the correct intent."""
+        result = {}
         try:
             if intent is None or intent not in INTENTS.keys():
                 logging.warning(f"Unknown intent received: {intent}")
@@ -82,9 +83,7 @@ class Main:
             
             result = intent_instance.run()
             response.status = falcon.HTTP_200
-        except Exception as e:
-            # 使用 GcpModule 的 logger，它可能已经配置为 Cloud Logging
-            # 如果 GcpModule 未初始化，它会回退到 root logger
+        except BaseException as e: # Catch all exceptions, including SystemExit
             try:
                 from lib.gcp import logger as gcp_logger
                 gcp_logger.exception("An error occurred while processing the intent:")

@@ -40,23 +40,33 @@ class Intent:
 
     def run(self):
         retval = {}
-        exc = None
         try:
             if not self._env.config.get('tradingEnabled', True):
                 raise SystemExit("Trading is globally disabled by kill switch in Firestore config.")
+            
             self._env.ibgw.start_and_connect()
             self._env.ibgw.reqMarketDataType(self._env.config['marketDataType'])
             retval = self._core()
-        except Exception as e:
+            
+        except BaseException as e: # Catch all exceptions, including SystemExit
             error_str = f'{e.__class__.__name__}: {e}'
             self._env.logging.error(error_str)
             self._activity_log.update(exception=error_str)
-            exc = e
-        finally:
-            self._env.ibgw.stop_and_terminate()
+            # Log activity on failure
             if self._env.env.get('K_REVISION', 'localhost') != 'localhost':
                 self._log_activity()
-            if exc is not None:
-                raise exc
+            raise e # Re-raise to be caught by main.py
+        finally:
+            # This block *always* runs for cleanup.
+            self._env.ibgw.stop_and_terminate()
             self._env.logging.info('Done.')
-            return retval or {**self._activity_log, 'timestamp': self._activity_log['timestamp'].isoformat()}
+
+        # This part is only reached on success
+        if self._env.env.get('K_REVISION', 'localhost') != 'localhost':
+            self._log_activity()
+        
+        # Format timestamp for JSON serialization if it exists
+        if 'timestamp' in self._activity_log:
+            self._activity_log['timestamp'] = self._activity_log['timestamp'].isoformat()
+            
+        return retval or self._activity_log

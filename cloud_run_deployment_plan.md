@@ -192,6 +192,7 @@ gcloud run services add-iam-policy-binding ${CLOUD_RUN_SERVICE_NAME} \
 
 ```bash
 gcloud scheduler jobs create http eod-allocation-job --project=${PROJECT_ID} \
+    --location=${GCP_REGION} \
     --schedule="15 16 * * 1-5" \
     --time-zone="America/New_York" \
     --uri="${SERVICE_URL}/allocation" \
