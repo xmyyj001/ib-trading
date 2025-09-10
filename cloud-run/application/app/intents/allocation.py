@@ -42,6 +42,11 @@ class Allocation(Intent):
         self._env.ibgw.sleep(2)
 
         account_values = self._env.get_account_values(self._env.config['account'])
+        
+        if 'NetLiquidation' not in account_values or not account_values['NetLiquidation']:
+            self._env.logging.error("Could not retrieve NetLiquidation from account values. This is often due to an incorrect account ID in Firestore config.")
+            raise ValueError(f"NetLiquidation not found for account {self._env.config['account']}. Please check your Firestore configuration.")
+
         base_currency, net_liquidation = list(account_values['NetLiquidation'].items())[0]
         self._activity_log.update(netLiquidation=net_liquidation)
 

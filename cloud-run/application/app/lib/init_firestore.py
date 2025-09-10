@@ -28,7 +28,7 @@ config_data = {
         }
     },
     "paper": {
-        "account": "[REPLACE_WITH_YOUR_PAPER_ACCOUNT]"
+        "account": "DU1888364"
     },
     "live": {
         "account": "[REPLACE_WITH_YOUR_LIVE_ACCOUNT]"
