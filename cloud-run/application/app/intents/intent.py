@@ -42,8 +42,9 @@ class Intent:
         retval = {}
         exc = None
         try:
+            if not self._env.config.get('tradingEnabled', True):
+                raise SystemExit("Trading is globally disabled by kill switch in Firestore config.")
             self._env.ibgw.start_and_connect()
-            # https://interactivebrokers.github.io/tws-api/market_data_type.html
             self._env.ibgw.reqMarketDataType(self._env.config['marketDataType'])
             retval = self._core()
         except Exception as e:
@@ -53,10 +54,9 @@ class Intent:
             exc = e
         finally:
             self._env.ibgw.stop_and_terminate()
-            if self._env.env['K_REVISION'] != 'localhost':
+            if self._env.env.get('K_REVISION', 'localhost') != 'localhost':
                 self._log_activity()
             if exc is not None:
-                # raise main exception so that main.py returns 500 response
                 raise exc
             self._env.logging.info('Done.')
             return retval or {**self._activity_log, 'timestamp': self._activity_log['timestamp'].isoformat()}

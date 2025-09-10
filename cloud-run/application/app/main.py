@@ -25,6 +25,7 @@ from intents.collect_market_data import CollectMarketData
 from intents.intent import Intent
 from intents.summary import Summary
 from intents.trade_reconciliation import TradeReconciliation
+from intents.reconcile import Reconcile
 from lib.environment import Environment
 
 # 3. 简化并加固环境变量处理

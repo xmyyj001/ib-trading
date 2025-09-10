@@ -1,48 +1,53 @@
-# init_firestore.py
 import sys
 from google.cloud import firestore
 
 if len(sys.argv) < 2:
     print("错误：请提供项目ID作为第一个参数。")
+    print("用法: python init_firestore.py YOUR_PROJECT_ID")
     sys.exit(1)
 
 project_id = sys.argv[1]
-print(f"正在为项目 '{project_id}' 初始化 Firestore 配置...")
+print(f"正在为项目 '{project_id}' 初始化 Firestore 配置 (场景A: 波段交易)...")
 
 db = firestore.Client(project=project_id)
 
-config_docs = {
-    "config": {
-        "common": {
-            "default_setting": "hello_world",
-            "risk_limit": 0.01,
-            "marketDataType": 3,  # <-- 关键修复：添加缺失的配置项 (1=Live, 2=Frozen, 3=Delayed)
-            "exposure": { # 新增 exposure 配置
-                "overall": 1.0, # 整体风险敞口，例如 1.0 表示 100%
-                "strategies": {
-                    "dummy": 1.0, # dummy 策略的风险敞口，例如 1.0 表示 100%
-                    "spymacdvixy": 1.0 # Exposure for the spymacdvixy strategy
-                }
-            },
-            "retryCheckMinutes": 5 # 新增 retryCheckMinutes 配置
-        },
-        "paper": {
-            "strategy_enabled": True,
-            "max_positions": 5,
-            "account": "DU1888364" # <-- 关键修复：添加您的 paper trading 账号
-        },
-        "live": {
-            "strategy_enabled": False,
-            "max_positions": 10,
-            "account": "YOUR_LIVE_ACCOUNT" # <-- 将来替换为您的真实账号
+config_data = {
+    "common": {
+        "tradingEnabled": False,
+        "enforceFlatEod": False,
+        "marketDataType": 2,
+        "defaultOrderType": "LMT",
+        "defaultOrderTif": "GTC",
+        "retryCheckMinutes": 1440,
+        "exposure": {
+            "overall": 0.9,
+            "strategies": {
+                "spymacdvixy": 1.0,
+                "dummy": 1.0
+            }
         }
+    },
+    "paper": {
+        "account": "[REPLACE_WITH_YOUR_PAPER_ACCOUNT]"
+    },
+    "live": {
+        "account": "[REPLACE_WITH_YOUR_LIVE_ACCOUNT]"
     }
 }
 
-for collection, documents in config_docs.items():
-    for doc_id, data in documents.items():
-        doc_ref = db.collection(collection).document(doc_id)
-        doc_ref.set(data)
-        print(f"成功创建/更新文档: '{collection}/{doc_id}'")
+def initialize_firestore():
+    """Writes the defined configuration to Firestore, overwriting existing docs."""
+    for doc_id, data in config_data.items():
+        doc_ref = db.collection("config").document(doc_id)
+        try:
+            doc_ref.set(data)
+            print(f"成功创建/更新文档: 'config/{doc_id}'")
+        except Exception as e:
+            print(f"错误：写入文档 'config/{doc_id}'失败: {e}")
+            sys.exit(1)
+    
+    print("\nFirestore 配置初始化完成。")
+    print("重要提示: 请记得到 Firestore 控制台将 config/common -> tradingEnabled 设置为 true 以开启交易。")
 
-print("Firestore 配置初始化完成。")
+if __name__ == "__main__":
+    initialize_firestore()
