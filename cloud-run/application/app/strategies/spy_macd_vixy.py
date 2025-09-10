@@ -16,8 +16,8 @@ class SpyMacdVixy(Strategy):
         Define the instruments required for this strategy.
         """
         self._env.logging.info("Setting up SpyMacdVixy strategy instruments...")
-        self.spy = Stock('SPY', 'ARCA', 'USD')
-        self.vixy = Stock('VIXY', 'BATS', 'USD')
+        self.spy = Stock('SPY')
+        self.vixy = Stock('VIXY')
         self._register_contracts(self.spy, self.vixy)
 
     def _get_signals(self):
