@@ -14,6 +14,7 @@ steps:
     id: 'Build-Application'
     args:
       - 'build'
+      - '--no-cache'
       - '--build-arg'
       - 'BASE_IMAGE_URL=europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/base:latest'
       - '--tag'
