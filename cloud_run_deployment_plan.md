@@ -150,7 +150,7 @@ gcloud run services update ${CLOUD_RUN_SERVICE_NAME} --region ${GCP_REGION} \
 1.  **获取服务 URL 和认证令牌**
     *   **说明**: 第一个命令获取您服务的公开访问URL并存入变量。第二个命令为您的用户身份生成一个临时的、安全的访问令牌。
     ```bash
-    export SERVICE_URL=$(gcloud run services describe ${CLOUD_RUN_SERVICE_NAME} --region ${GCP_REGION} --format="value(status.url)")
+    export SERVICE_URL=$(gcloud run services describe ${CLOUD_RUN_SERVICE_NAME} --region ${GCP_REGION} --project ${PROJECT_ID} --format="value(status.url)")
     export TOKEN=$(gcloud auth print-identity-token)
     echo "Service URL set to: ${SERVICE_URL}"
     ```

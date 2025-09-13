@@ -21,6 +21,10 @@ RUN python -m pip install --upgrade pip && \
 # 4. 复制应用代码
 COPY app/ .
 
+# 4.1. 清理 Python 字节码缓存 (关键修复步骤)
+RUN find . -type d -name "__pycache__" -exec rm -r {} +
+RUN find . -type f -name "*.pyc" -delete
+
 # 5. 复制应用专属的启动脚本
 COPY cmd.sh .
 RUN chmod +x cmd.sh
