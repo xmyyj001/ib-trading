@@ -63,11 +63,15 @@ class Instrument(ABC):
 class Contract(Instrument):
 
     IB_CLS = ib_insync.Contract
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
 
 class Forex(Instrument):
 
     IB_CLS = ib_insync.Forex
+    def __init__(self, pair, **kwargs):
+        super().__init__(pair=pair, **kwargs)
 
 
 class Future(Instrument):
@@ -84,6 +88,9 @@ class Future(Instrument):
         'm': ['F', 'G', 'H', 'J', 'K', 'M', 'N', 'Q', 'U', 'V', 'X', 'Z'],
         'q': ['H', 'M', 'U', 'Z']
     }
+
+    def __init__(self, symbol, lastTradeDateOrContractMonth, exchange, **kwargs):
+        super().__init__(symbol=symbol, lastTradeDateOrContractMonth=lastTradeDateOrContractMonth, exchange=exchange, **kwargs)
 
     @classmethod
     def get_contract_series(cls, n, ticker, rollover_days_before_expiry=1):
@@ -113,11 +120,15 @@ class Future(Instrument):
 class Index(Instrument):
 
     IB_CLS = ib_insync.Index
+    def __init__(self, symbol, exchange, currency, **kwargs):
+        super().__init__(symbol=symbol, exchange=exchange, currency=currency, **kwargs)
 
 
 class Stock(Instrument):
 
     IB_CLS = ib_insync.Stock
+    def __init__(self, symbol, exchange, currency, **kwargs):
+        super().__init__(symbol=symbol, exchange=exchange, currency=currency, **kwargs)
 
 
 class InstrumentSet:

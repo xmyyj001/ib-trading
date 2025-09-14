@@ -57,8 +57,12 @@ class Environment:
             self._logging.info("Successfully loaded configuration from Firestore.")
 
             # --- IB Gateway 实例化 ---
-            # IBGW 将使用默认设置 (host='127.0.0.1', port=4002) 连接到已经运行和登录的 Gateway。
-            self._ibgw = IBGW(config)
+            # 关键修复：创建一个包含正确端口的 ib_config 字典
+            # 并将其作为第二个参数传递给 IBGW 的构造函数。
+            ib_connect_config = {
+                'port': self._config.get('apiPort', 4002) # 优先从 Firestore 读取，如果没有则默认为 4002
+            }
+            self._ibgw = IBGW(config, ib_config=ib_connect_config)
             util.logToConsole(logging.ERROR)
 
         @property
