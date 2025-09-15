@@ -45,20 +45,29 @@ class Instrument(ABC):
         """
         Requests contract details from IB.
         """
-        if len(contract_details := self._env.ibgw.reqContractDetails(self._ib_contract)):
-            contract_details = contract_details[0].nonDefaults()
-            self._contract = contract_details.pop('contract')
-            self._local_symbol = self._contract.localSymbol
-            self._details = contract_details
+        if self._ib_contract and hasattr(self._ib_contract, 'symbol'): # Add a check for valid contract
+            try:
+                contract_details_list = self._env.ibgw.reqContractDetails(self._ib_contract)
+                if contract_details_list:
+                    contract_details = contract_details_list[0].nonDefaults()
+                    self._contract = contract_details.pop('contract')
+                    self._local_symbol = self._contract.localSymbol
+                    self._details = contract_details
+            except Exception as e:
+                self._env.logging.error(f"Error fetching contract details for {self._ib_contract.symbol}: {e}")
 
     def get_tickers(self):
         """
         Requests price data for contract from IB.
         """
-        self._env.logging.info(f'Requesting tick data for {self._local_symbol}...')
-        if len(tickers := self._env.ibgw.reqTickers(self._contract)):
-            self._tickers = tickers[0]
-
+        if self._contract:
+            self._env.logging.info(f'Requesting tick data for {self._local_symbol}...')
+            try:
+                tickers = self._env.ibgw.reqTickers(self._contract)
+                if tickers:
+                    self._tickers = tickers[0]
+            except Exception as e:
+                self._env.logging.error(f"Error fetching tickers for {self._local_symbol}: {e}")
 
 class Contract(Instrument):
 
@@ -96,21 +105,24 @@ class Future(Instrument):
     def get_contract_series(cls, n, ticker, rollover_days_before_expiry=1):
         logging = GcpModule.get_logger()
 
-        # 调整合约年份生成逻辑，获取当前年份和未来两年的合约
-        # 确保能够找到活跃的、未来的合约
         current_year = datetime.now().year
-        contract_years = [str(current_year + i)[-1] for i in range(3)] # 获取当前年份和未来两年
+        contract_years = [str(current_year + i)[-1] for i in range(3)]
 
         contract_symbols = [ticker + m + y for y in contract_years for m in cls.EXPIRY_SCHEMES[cls.CONTRACT_SPECS[ticker]['expiry_scheme']]]
 
         logging.info(f"Requesting contract for {', '.join(contract_symbols)}...")
-        contracts = InstrumentSet(*[f for f in [cls(localSymbol=s,
-                                                    exchange=cls.CONTRACT_SPECS[ticker]['exchange'],
-                                                    currency=cls.CONTRACT_SPECS[ticker]['currency'])
-                                                for s in contract_symbols]
-                                    if f.contract is not None and f.contract.lastTradeDateOrContractMonth > (datetime.now() + timedelta(days=rollover_days_before_expiry)).strftime('%Y%m%d')])
         
-        # 确保返回的合约数量至少为 n，如果不足则可能需要调整 rollover_days_before_expiry 或合约生成逻辑
+        valid_contracts = []
+        for s in contract_symbols:
+            try:
+                future_instrument = cls(symbol=ticker, lastTradeDateOrContractMonth=s, exchange=cls.CONTRACT_SPECS[ticker]['exchange'], currency=cls.CONTRACT_SPECS[ticker]['currency'])
+                if future_instrument.contract and future_instrument.contract.lastTradeDateOrContractMonth > (datetime.now() + timedelta(days=rollover_days_before_expiry)).strftime('%Y%m%d'):
+                    valid_contracts.append(future_instrument)
+            except Exception as e:
+                logging.warning(f"Could not resolve contract for {s}: {e}")
+
+        contracts = InstrumentSet(*valid_contracts)
+        
         if len(contracts) < n:
             logging.warning(f"Only {len(contracts)} contracts found, but {n} were requested. Consider adjusting rollover_days_before_expiry or contract generation logic.")
 
@@ -134,7 +146,6 @@ class Stock(Instrument):
 class InstrumentSet:
 
     def __init__(self, *args):
-        # check for iterability and type
         iter(args)
         if not all(isinstance(a, Instrument) for a in args):
             raise TypeError('Not all arguments are of type Instrument')
@@ -157,7 +168,7 @@ class InstrumentSet:
 
     @property
     def contracts(self):
-        return [c.contract for c in self._constituents]
+        return [c.contract for c in self._constituents if c.contract]
 
     @property
     def tickers(self):
@@ -167,11 +178,17 @@ class InstrumentSet:
         """
         Requests price data for contract from IB.
         """
-        self._env.logging.info(f"Requesting tick data for {', '.join(c.local_symbol for c in self._constituents)}...")
-        tickers = self._env.ibgw.reqTickers(*self.contracts)
-        for c, t in zip(self._constituents, tickers):
-            c._tickers = t
-
+        valid_contracts = self.contracts
+        if valid_contracts:
+            self._env.logging.info(f"Requesting tick data for {', '.join([c.localSymbol for c in valid_contracts if c.localSymbol])}...")
+            try:
+                tickers = self._env.ibgw.reqTickers(*valid_contracts)
+                ticker_map = {t.contract.conId: t for t in tickers}
+                for c in self._constituents:
+                    if c.contract and c.contract.conId in ticker_map:
+                        c._tickers = ticker_map[c.contract.conId]
+            except Exception as e:
+                self._env.logging.error(f"Error fetching tickers: {e}")
 
 class Trade:
 
@@ -198,32 +215,22 @@ class Trade:
                 if k not in self._trades:
                     self._trades[k] = {}
                 self._trades[k]['contract'] = strategy.contracts[k]
-                if 'quantity' in self._trades[k]:
-                    self._trades[k]['quantity'] += v
-                else:
-                    self._trades[k]['quantity'] = v
-                if 'source' in self._trades[k]:
-                    self._trades[k]['source'][strategy.id] = v
-                else:
-                    self._trades[k]['source'] = {strategy.id: v}
+                self._trades[k]['quantity'] = self._trades[k].get('quantity', 0) + v['quantity']
+                self._trades[k]['source'] = self._trades[k].get('source', {})
+                self._trades[k]['source'][strategy.id] = v['quantity']
 
         self._trades = {k: v for k, v in self._trades.items() if v['quantity'] != 0}
 
     def _log_trades(self, trades=None):
         """
         Logs orders in Firestore under holdings if already filled or openOrders if not.
-
-        :param trades: orders that were placed (list of ib_insync Trade objects)
-        :return: activity log entry (dict)
         """
         if trades is None:
             trades = self._env.ibgw.trades()
 
         for t in trades:
-            # self._env.logging.debug(ib_insync.util.tree(t.nonDefaults()))
             contract_id = t.contract.conId
             if t.orderStatus.status in ib_insync.OrderStatus.ActiveStates:
-                # add to openOrders collection if not done yet
                 doc_ref = self._env.db.collection(f'positions/{self._env.trading_mode}/openOrders').document()
                 doc_ref.set({
                     'acctNumber': self._env.config['account'],
@@ -236,30 +243,18 @@ class Trade:
                 self._env.logging.info(f'Added {contract_id} to /positions/{self._env.trading_mode}/openOrders/{doc_ref.id}')
             elif t.orderStatus.status in ib_insync.OrderStatus.DoneStates:
                 for strategy, quantity in self._trades[contract_id]['source'].items():
-                    # update holdings collection if filled
                     doc_ref = self._env.db.collection(f'positions/{self._env.trading_mode}/holdings').document(strategy)
                     portfolio = doc_ref.get().to_dict() or {}
-                    # firestore.transforms.Increment(increment)
                     action = doc_ref.update if doc_ref.get().exists else doc_ref.set
                     action({
                         str(contract_id): portfolio.get(str(contract_id), 0) + quantity or DELETE_FIELD
                     })
                     self._env.logging.info(f'Updated {contract_id} in /positions/{self._env.trading_mode}/holdings/{strategy}')
-                    # TODO: use Fill/Execution instead?
 
-        # return activity log entry
         return {
             t.contract.localSymbol: {
-                'order': {
-                    k: v
-                    for k, v in t.order.nonDefaults().items()
-                    if isinstance(v, (int, float, str))
-                },
-                'orderStatus': {
-                    k: v
-                    for k, v in t.orderStatus.nonDefaults().items()
-                    if isinstance(v, (int, float, str))
-                },
+                'order': {k: v for k, v in t.order.nonDefaults().items() if isinstance(v, (int, float, str))},
+                'orderStatus': {k: v for k, v in t.orderStatus.nonDefaults().items() if isinstance(v, (int, float, str))},
                 'isActive': t.isActive()
             } for t in trades
         }
@@ -267,23 +262,16 @@ class Trade:
     def place_orders(self, order_type=ib_insync.MarketOrder, order_params=None, order_properties=None):
         """
         Places orders in the market.
-
-        :param order_type: IB order type (ib_insync Order object)
-        :param order_params: arguments for IB order (dict)
-        :param order_properties: additional order parameters (dict)
-        :return: activity log entry (dict)
         """
         order_properties = order_properties or {}
         order_params = order_params or {}
 
-        # place orders
         perm_ids = []
         for v in self._trades.values():
             order = self._env.ibgw.placeOrder(v['contract'].contract,
                                               order_type(action='BUY' if v['quantity'] > 0 else 'SELL',
                                                          totalQuantity=abs(v['quantity']),
                                                          **order_params).update(**{'tif': 'GTC', **order_properties}))
-            # give the IB Gateway a couple of seconds to digest orders and to raise possible errors
             self._env.ibgw.sleep(2)
             perm_ids.append(order.order.permId)
         self._env.logging.debug(f'Order permanent IDs: {perm_ids}')

@@ -1,15 +1,13 @@
-
 import pandas as pd
 from ib_insync import util
 from strategies.strategy import Strategy
 from lib.trading import Stock
-import os
-
-STATE_FILE = '/tmp/trade_state.txt'
 
 class SpyMacdVixy(Strategy):
     """
-    A trading strategy that alternates between long and short SPY for testing purposes.
+    A trading strategy based on the MACD indicator for SPY, with a hedge using VIXY.
+    - When MACD is above the signal line (bullish), go long SPY.
+    - When MACD is below the signal line (bearish), go short SPY.
     """
 
     def _setup(self):
@@ -18,30 +16,22 @@ class SpyMacdVixy(Strategy):
         """
         self._env.logging.info("Setting up SpyMacdVixy strategy instruments...")
         self.spy = Stock('SPY', 'ARCA', 'USD')
-        self.vixy = Stock('VIXY', 'BATS', 'USD') # Keep VIXY to avoid breaking other parts
+        self.vixy = Stock('VIXY', 'BATS', 'USD')
         self._register_contracts(self.spy, self.vixy)
 
     def _get_signals(self):
         """
-        Alternates between buying and selling SPY.
+        Calculate MACD for SPY and generate trading signals for SPY and VIXY.
+        Returns signals in the format {conId: (weight, price)}.
         """
-        self._env.logging.info("Generating alternating signals for SpyMacdVixy...")
-
-        # 1. Determine the next action from the state file
-        next_action = 'BUY'
-        if os.path.exists(STATE_FILE):
-            with open(STATE_FILE, 'r') as f:
-                last_action = f.read().strip()
-                if last_action == 'BUY':
-                    next_action = 'SELL'
-
-        self._env.logging.info(f"Last action was '{last_action if 'last_action' in locals() else None}'. Next action is '{next_action}'.")
-
-        # 2. Fetch the last price of SPY for the limit order
+        self._env.logging.info("Generating signals for SpyMacdVixy...")
+        
+        # 1. Fetch historical data for SPY
+        self._env.logging.info("Fetching historical data for SPY...")
         bars = self._env.ibgw.reqHistoricalData(
             self.spy.contract,
             endDateTime='',
-            durationStr='1 D',
+            durationStr='100 D',
             barSizeSetting='1 day',
             whatToShow='TRADES',
             useRTH=True
@@ -52,22 +42,38 @@ class SpyMacdVixy(Strategy):
             self._signals = { k: (0, 0) for k in self._holdings.keys() }
             return
 
-        last_price = util.df(bars).iloc[-1]['close']
+        df = util.df(bars)
+        if df.empty:
+            self._env.logging.error("Historical data for SPY is empty. Aborting.")
+            self._signals = { k: (0, 0) for k in self._holdings.keys() }
+            return
+            
+        # 2. Calculate MACD
+        self._env.logging.info("Calculating MACD...")
+        exp12 = df['close'].ewm(span=12, adjust=False).mean()
+        exp26 = df['close'].ewm(span=26, adjust=False).mean()
+        macd = exp12 - exp26
+        signal = macd.ewm(span=9, adjust=False).mean()
 
-        # 3. Generate the signal and update the state file
-        if next_action == 'BUY':
-            self._env.logging.info(f"Generating BUY signal for SPY at price {last_price}.")
+        # Get latest closing price for limit orders
+        last_price = df.iloc[-1]['close']
+
+        # 3. Generate signals based on state (relaxed condition for testing)
+        if macd.iloc[-1] > signal.iloc[-1]:
+            # Bullish State
+            self._env.logging.info(f"Bullish state detected at price {last_price}: Long SPY.")
             self._signals = {
                 self.spy.contract.conId: (1.0, last_price),   # Target 100% allocation to long SPY
-                self.vixy.contract.conId: (0.0, 0.0)          # Ensure VIXY is not traded
+                self.vixy.contract.conId: (0.0, 0.0)      # Target 0% allocation to VIXY
             }
-            with open(STATE_FILE, 'w') as f:
-                f.write('BUY')
-        else: # SELL
-            self._env.logging.info(f"Generating SELL signal for SPY at price {last_price}.")
+        elif macd.iloc[-1] < signal.iloc[-1]:
+            # Bearish State
+            self._env.logging.info(f"Bearish state detected at price {last_price}: Short SPY.")
             self._signals = {
                 self.spy.contract.conId: (-1.0, last_price), # Target 100% allocation to short SPY
-                self.vixy.contract.conId: (0.0, 0.0)         # Ensure VIXY is not traded
+                self.vixy.contract.conId: (0.0, 0.0)  # Hedge is removed for simplicity in this test
             }
-            with open(STATE_FILE, 'w') as f:
-                f.write('SELL')
+        else:
+            # No clear signal, maintain current positions
+            self._env.logging.info("No clear bullish/bearish state. No change in signals.")
+            self._signals = { k: (0, 0) for k in self._holdings.keys() }

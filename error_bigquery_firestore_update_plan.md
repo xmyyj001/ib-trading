@@ -169,7 +169,7 @@ gcloud builds submit --config cloud-run/application/cloudbuild.yaml \
         gcloud builds submit --config cloud-run/application/cloudbuild.yaml .
 
 # 3.如果出现运行结果错误，可以读取日志，以查错
-gcloud run services logs read ib-paper --region asia-east1 --limit 50
+gcloud run services logs read ib-paper --region asia-east1 --limit 100
 
 # 4.出现问题删除cloud-run 
 gcloud run services delete ib-paper --region asia-east1
