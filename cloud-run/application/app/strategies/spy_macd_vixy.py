@@ -58,22 +58,22 @@ class SpyMacdVixy(Strategy):
         # Get latest closing price for limit orders
         last_price = df.iloc[-1]['close']
 
-        # 3. Generate signals based on state (relaxed condition for testing)
+        # 3. Generate signals based on state (modified for frequent testing)
         if macd.iloc[-1] > signal.iloc[-1]:
-            # Bullish State
+            # Bullish State: MACD is above the signal line
             self._env.logging.info(f"Bullish state detected at price {last_price}: Long SPY.")
             self._signals = {
                 self.spy.contract.conId: (1.0, last_price),   # Target 100% allocation to long SPY
                 self.vixy.contract.conId: (0.0, 0.0)      # Target 0% allocation to VIXY
             }
         elif macd.iloc[-1] < signal.iloc[-1]:
-            # Bearish State
+            # Bearish State: MACD is below the signal line
             self._env.logging.info(f"Bearish state detected at price {last_price}: Short SPY.")
             self._signals = {
                 self.spy.contract.conId: (-1.0, last_price), # Target 100% allocation to short SPY
                 self.vixy.contract.conId: (0.0, 0.0)  # Hedge is removed for simplicity in this test
             }
         else:
-            # No clear signal, maintain current positions
+            # No clear signal (lines are equal), maintain current positions
             self._env.logging.info("No clear bullish/bearish state. No change in signals.")
             self._signals = { k: (0, 0) for k in self._holdings.keys() }

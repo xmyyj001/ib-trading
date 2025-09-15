@@ -74,8 +74,12 @@ class Strategy:
             for k, v_tuple in self._signals.items():
                 weight, price = v_tuple
                 if weight != 0 and price > 0:
+                    # Safely get the multiplier, defaulting to 1 for stocks if it's empty or None
+                    multiplier_str = self._contracts[k].contract.multiplier
+                    multiplier = int(multiplier_str) if multiplier_str else 1
+
                     self._target_positions[k] = round(self._exposure * weight
-                                     / (price * int(self._contracts[k].contract.multiplier) * self._fx[self._contracts[k].contract.currency]))
+                                     / (price * multiplier * self._fx[self._contracts[k].contract.currency]))
                 else:
                     self._target_positions[k] = 0
         else:
