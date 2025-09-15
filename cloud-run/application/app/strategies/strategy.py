@@ -92,18 +92,34 @@ class Strategy:
     def _get_currencies(self, base_currency):
         """
         Gets the FX rates for all involved contracts.
-
         :param base_currency: base currency of IB account in ISO format (str)
         """
-        currencies = {c.contract.currency for c in self._contracts.values()}
-        forex = InstrumentSet(*[Forex(pair=c + base_currency) for c in currencies])
-        forex.get_tickers()
-        fx_rates = [f.tickers.midpoint() if f.tickers.midpoint() == f.tickers.midpoint() else f.tickers.close
-                    for f in forex]
-        self._fx = {
-            currency: 1 if currency == base_currency else fx_rate
-            for currency, fx_rate in zip(currencies, fx_rates)
-        }
+        # 1. 初始化 FX 字典，基础货币对自身的汇率永远是 1.0
+        self._fx = {base_currency: 1.0}
+        
+        # 2. 找出所有需要查询汇率的、非基础货币的币种
+        currencies_to_fetch = {c.contract.currency for c in self._contracts.values() if c.contract and c.contract.currency != base_currency}
+
+        if not currencies_to_fetch:
+            self._env.logging.info("All instruments are in the base currency. No FX rates needed.")
+            return
+
+        # 3. 只为非基础货币创建 Forex 合约
+        self._env.logging.info(f"Fetching FX rates for: {currencies_to_fetch}")
+        forex_instruments = InstrumentSet(*[Forex(pair=c + base_currency) for c in currencies_to_fetch])
+        forex_instruments.get_tickers()
+
+        # 4. 健壮地填充汇率字典
+        for instrument in forex_instruments:
+            # 从 'EURUSD' 中提取 'EUR'
+            currency = instrument.contract.symbol
+            if instrument.tickers:
+                # 使用 nan-safe 的方式获取中间价
+                rate = instrument.tickers.midpoint() if instrument.tickers.midpoint() == instrument.tickers.midpoint() else instrument.tickers.close
+                self._fx[currency] = rate
+                self._env.logging.info(f"Fetched FX rate for {currency}{base_currency}: {rate}")
+            else:
+                self._env.logging.error(f"Could not fetch FX rate for {currency}{base_currency}. It will be missing from the FX map.")
 
     def _get_holdings(self):
         """
