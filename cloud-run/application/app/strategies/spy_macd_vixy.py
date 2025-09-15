@@ -58,16 +58,16 @@ class SpyMacdVixy(Strategy):
         if next_action == 'BUY':
             self._env.logging.info(f"Generating BUY signal for SPY at price {last_price}.")
             self._signals = {
-                self.spy.id: (1.0, last_price),   # Target 100% allocation to long SPY
-                self.vixy.id: (0.0, 0.0)          # Ensure VIXY is not traded
+                self.spy.contract.conId: (1.0, last_price),   # Target 100% allocation to long SPY
+                self.vixy.contract.conId: (0.0, 0.0)          # Ensure VIXY is not traded
             }
             with open(STATE_FILE, 'w') as f:
                 f.write('BUY')
         else: # SELL
             self._env.logging.info(f"Generating SELL signal for SPY at price {last_price}.")
             self._signals = {
-                self.spy.id: (-1.0, last_price), # Target 100% allocation to short SPY
-                self.vixy.id: (0.0, 0.0)         # Ensure VIXY is not traded
+                self.spy.contract.conId: (-1.0, last_price), # Target 100% allocation to short SPY
+                self.vixy.contract.conId: (0.0, 0.0)         # Ensure VIXY is not traded
             }
             with open(STATE_FILE, 'w') as f:
                 f.write('SELL')
