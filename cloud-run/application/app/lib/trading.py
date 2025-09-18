@@ -268,10 +268,30 @@ class Trade:
 
         perm_ids = []
         for v in self._trades.values():
-            order = self._env.ibgw.placeOrder(v['contract'].contract,
-                                              order_type(action='BUY' if v['quantity'] > 0 else 'SELL',
-                                                         totalQuantity=abs(v['quantity']),
-                                                         **order_params).update(**{'tif': 'GTC', **order_properties}))
+            # Prepare order arguments
+            order_args = {
+                'action': 'BUY' if v['quantity'] > 0 else 'SELL',
+                'totalQuantity': abs(v['quantity']),
+                **order_params
+            }
+
+            # If it's a LimitOrder, add the lmtPrice from the trade dictionary
+            if order_type == ib_insync.LimitOrder:
+                if 'lmtPrice' in v and v['lmtPrice'] > 0:
+                    order_args['lmtPrice'] = v['lmtPrice']
+                else:
+                    self._env.logging.error(f"LimitOrder requested but no valid lmtPrice found in trade data for {v['contract'].local_symbol}. Skipping order.")
+                    continue # Skip this order
+
+            # Add orderRef for tracking
+            if 'orderRef' not in order_properties and 'source' in v:
+                order_properties['orderRef'] = list(v['source'].keys())[0]
+
+            order = self._env.ibgw.placeOrder(
+                v['contract'].contract,
+                order_type(**order_args).update(**{'tif': 'GTC', **order_properties})
+            )
+
             self._env.ibgw.sleep(2)
             perm_ids.append(order.order.permId)
         self._env.logging.debug(f'Order permanent IDs: {perm_ids}')
