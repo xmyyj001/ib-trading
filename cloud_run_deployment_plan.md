@@ -168,6 +168,11 @@ gcloud run services update ${CLOUD_RUN_SERVICE_NAME} --region ${GCP_REGION} \
     curl -X POST -H "Content-Type: application/json" -H "Authorization: Bearer ${TOKEN}" \
     -d '{"dryRun": true, "strategies": ["spymacdvixy"]}' \
     "${SERVICE_URL}/allocation"
+
+    * ** **: ‘dryRun: false’ 实际下单。
+    curl -X POST -H "Content-Type: application/json" -H "Authorization: Bearer ${TOKEN}" \
+    -d '{"dryRun": false, "strategies": ["spymacdvixy"]}' \
+    "${SERVICE_URL}/allocation"
     ```
 
 ### 步骤 10: 解决403禁止访问错误

@@ -6,8 +6,8 @@ from lib.trading import Stock
 class SpyMacdVixy(Strategy):
     """
     A trading strategy based on the MACD indicator for SPY, with a hedge using VIXY.
-    - When MACD is above the signal line (bullish), go long SPY.
-    - When MACD is below the signal line (bearish), go short SPY.
+    - When MACD crosses above the signal line (bullish), go long SPY.
+    - When MACD crosses below the signal line (bearish), go short SPY.
     """
 
     def _setup(self):
@@ -37,8 +37,8 @@ class SpyMacdVixy(Strategy):
             useRTH=True
         )
 
-        if not bars:
-            self._env.logging.error("Could not fetch historical data for SPY. Aborting.")
+        if not bars or len(bars) < 26: # Ensure enough data for MACD
+            self._env.logging.error("Not enough historical data for SPY to calculate MACD. Aborting.")
             self._signals = { k: (0, 0) for k in self._holdings.keys() }
             return
 
@@ -58,22 +58,22 @@ class SpyMacdVixy(Strategy):
         # Get latest closing price for limit orders
         last_price = df.iloc[-1]['close']
 
-        # 3. Generate signals based on state (modified for frequent testing)
-        if macd.iloc[-1] > signal.iloc[-1]:
-            # Bullish State: MACD is above the signal line
-            self._env.logging.info(f"Bullish state detected at price {last_price}: Long SPY.")
+        # 3. Generate signals based on crossover event
+        if macd.iloc[-1] > signal.iloc[-1] and macd.iloc[-2] < signal.iloc[-2]:
+            # Bullish Crossover (Golden Cross)
+            self._env.logging.info(f"Bullish Crossover detected at price {last_price}: Long SPY, Close VIXY.")
             self._signals = {
-                self.spy.contract.conId: (1.0, last_price),   # Target 100% allocation to long SPY
-                self.vixy.contract.conId: (0.0, 0.0)      # Target 0% allocation to VIXY
+                self.spy.contract.conId: (1.0, last_price),
+                self.vixy.contract.conId: (0.0, 0.0)
             }
-        elif macd.iloc[-1] < signal.iloc[-1]:
-            # Bearish State: MACD is below the signal line
-            self._env.logging.info(f"Bearish state detected at price {last_price}: Short SPY.")
+        elif macd.iloc[-1] < signal.iloc[-1] and macd.iloc[-2] > signal.iloc[-2]:
+            # Bearish Crossover (Death Cross)
+            self._env.logging.info(f"Bearish Crossover detected at price {last_price}: Short SPY, Hedge VIXY.")
             self._signals = {
-                self.spy.contract.conId: (-1.0, last_price), # Target 100% allocation to short SPY
-                self.vixy.contract.conId: (0.0, 0.0)  # Hedge is removed for simplicity in this test
+                self.spy.contract.conId: (-1.0, last_price),
+                self.vixy.contract.conId: (1.0, 0.0) # Example hedge, price for VIXY would need to be fetched
             }
         else:
-            # No clear signal (lines are equal), maintain current positions
-            self._env.logging.info("No clear bullish/bearish state. No change in signals.")
+            # No new crossover, maintain current positions by returning zero signals
+            self._env.logging.info("No new crossover detected. No change in signals.")
             self._signals = { k: (0, 0) for k in self._holdings.keys() }
