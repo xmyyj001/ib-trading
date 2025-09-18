@@ -214,7 +214,11 @@ class Trade:
             for k, v in strategy.trades.items():
                 if k not in self._trades:
                     self._trades[k] = {}
-                self._trades[k]['contract'] = strategy.contracts[k]
+                    self._trades[k]['contract'] = strategy.contracts[k]
+                    # Carry over the limit price from the first strategy that provides it
+                    if 'lmtPrice' in v:
+                        self._trades[k]['lmtPrice'] = v['lmtPrice']
+
                 self._trades[k]['quantity'] = self._trades[k].get('quantity', 0) + v['quantity']
                 self._trades[k]['source'] = self._trades[k].get('source', {})
                 self._trades[k]['source'][strategy.id] = v['quantity']
