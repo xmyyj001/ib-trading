@@ -245,7 +245,7 @@ class Trade:
                     'timestamp': datetime.now(timezone.utc)
                 })
                 self._env.logging.info(f'Added {contract_id} to /positions/{self._env.trading_mode}/openOrders/{doc_ref.id}')
-            elif t.orderStatus.status in ib_insync.OrderStatus.DoneStates:
+            elif t.orderStatus.status == 'Filled':
                 for strategy, quantity in self._trades[contract_id]['source'].items():
                     doc_ref = self._env.db.collection(f'positions/{self._env.trading_mode}/holdings').document(strategy)
                     portfolio = doc_ref.get().to_dict() or {}
@@ -291,9 +291,13 @@ class Trade:
             if 'orderRef' not in order_properties and 'source' in v:
                 order_properties['orderRef'] = list(v['source'].keys())[0]
 
+            # Determine Time-In-Force: Prioritize request-level, then config, then default to GTC
+            tif = order_properties.get('tif', self._env.config.get('defaultOrderTif', 'GTC'))
+            final_order_props = {**order_properties, 'tif': tif}
+
             order = self._env.ibgw.placeOrder(
                 v['contract'].contract,
-                order_type(**order_args).update(**{'tif': 'GTC', **order_properties})
+                order_type(**order_args).update(**final_order_props)
             )
 
             self._env.ibgw.sleep(2)
