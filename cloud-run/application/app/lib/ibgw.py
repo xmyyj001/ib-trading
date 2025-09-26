@@ -1,7 +1,6 @@
+import asyncio
 from ib_insync import IB, IBC
-
 from lib.gcp import logger as logging
-
 
 class IBGW(IB):
 
@@ -9,61 +8,42 @@ class IBGW(IB):
 
     def __init__(self, ibc_config, ib_config=None, connection_timeout=60, timeout_sleep=5):
         super().__init__()
+        try:
+            self.loop = asyncio.get_running_loop()
+            logging.info("IBGW: Successfully got running event loop from get_running_loop().")
+        except RuntimeError:
+            logging.warning("IBGW: No running loop found, falling back to get_event_loop().")
+            self.loop = asyncio.get_event_loop()
+
         ib_config = ib_config or {}
         self.ibc_config = ibc_config
         self.ib_config = {**self.IB_CONFIG, **ib_config}
         self.connection_timeout = connection_timeout
         self.timeout_sleep = timeout_sleep
-
         self.ibc = IBC(**self.ibc_config)
 
-    # ... (其他部分不变) ...
+    def _run_in_loop(self, coro):
+        """Explicitly run a coroutine in the stored event loop."""
+        return self.loop.run_until_complete(coro)
 
     def start_and_connect(self):
-        """
-        Connects to an already running IB gateway.
-        The startup is now handled by cmd.sh.
-        """
-        # logging.info('Starting IBC...') # <--- 注释掉或删除
-        # self.ibc.start() # <--- 注释掉或删除
+        """Connects to an already running IB gateway using the stored event loop."""
         wait = self.connection_timeout
-
-        try:
-            while not self.isConnected():
+        while not self.isConnected():
+            if wait <= 0:
+                raise TimeoutError('Timeout reached while trying to connect to IB gateway')
+            logging.info('Connecting to IB gateway...')
+            try:
+                self._run_in_loop(self.connectAsync(**self.ib_config))
+            except (ConnectionRefusedError, OSError) as e:
+                logging.warning(f"Connection attempt failed: {e}. Retrying...")
                 self.sleep(self.timeout_sleep)
                 wait -= self.timeout_sleep
-                logging.info('Connecting to IB gateway...')
-                try:
-                    self.connect(**self.ib_config)
-                except ConnectionRefusedError:
-                    if wait <= 0:
-                        logging.warning('Timeout reached')
-                        raise TimeoutError('Could not connect to IB gateway')
-            logging.info('Connected.')
-        except Exception as e:
-            logging.error(f'{e.__class__.__name__}: {e}')
-            # 日志部分可以保留
-            try:
-                # 注意：ibc_config 可能不再是 self 的属性，需要确认
-                # 假设它仍然被传递并设置
-                log_path = self.ibc_config.get('logPath', '/opt/ibc/logs')
-                with open(f"{log_path}/twsstart.log", 'r') as fp: # 尝试读取更详细的日志
-                    logging.info(fp.read())
-            except Exception:
-                logging.warning(f"Could not read detailed IBC log.")
-            raise e
+        logging.info('Connected.')
 
-    # ... (其他部分不变) ...
-
-    def stop_and_terminate(self, wait=0):
-        """
-        Closes the connection with the IB gateway and terminates it.
-
-        :param wait: seconds to wait after terminating (int)
-        """
-
+    def stop_and_terminate(self):
+        """Closes the connection with the IB gateway and terminates it."""
         logging.info('Disconnecting from IB gateway...')
         self.disconnect()
         logging.info('Terminating IBC...')
-        self.ibc.terminate()
-        self.sleep(wait)
+        self._run_in_loop(self.ibc.terminateAsync())
