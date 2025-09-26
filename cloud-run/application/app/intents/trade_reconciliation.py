@@ -1,88 +1,108 @@
 from google.cloud.firestore_v1 import DELETE_FIELD
+from google.cloud.firestore_v1.transaction import transactional_async
 from ib_insync import Contract, util
+import asyncio
 
 from intents.intent import Intent
 
+@transactional_async
+async def _update_holdings_and_remove_open_order_async(transaction, db, holdings_doc_ref, order_doc_ref, contract_id, quantity):
+    """Atomically updates holdings and removes the corresponding open order document."""
+    holdings_snapshot = await holdings_doc_ref.get(transaction=transaction)
+    holdings = holdings_snapshot.to_dict() or {}
+    current_position = holdings.get(str(contract_id), 0)
+    new_position = current_position + quantity
+
+    if new_position == 0:
+        transaction.update(holdings_doc_ref, {str(contract_id): DELETE_FIELD})
+    else:
+        transaction.update(holdings_doc_ref, {str(contract_id): new_position})
+    
+    transaction.delete(order_doc_ref)
 
 class TradeReconciliation(Intent):
 
     def __init__(self):
         super().__init__()
 
-    def _core(self):
-        self._env.logging.info('Running trade reconciliation...')
+    async def _core(self):
+        self._env.logging.info('Running async trade reconciliation...')
 
-        # log open orders/trades
+        open_trades, fills, ib_portfolio = await asyncio.gather(
+            self._env.ibgw.reqOpenTradesAsync(),
+            self._env.ibgw.reqFillsAsync(),
+            self._env.ibgw.reqPortfolioAsync()
+        )
+
         self._activity_log.update(openOrders=[
             {
                 'contract': t.contract.nonDefaults(),
                 'orderStatus': t.orderStatus.nonDefaults(),
                 'log': util.tree(t.log)
-            } for t in self._env.ibgw.trades()
+            } for t in open_trades
         ])
 
-        # reconcile trades
-        fills = []
-        for fill in self._env.ibgw.fills():
-            # logging.debug(util.tree(fill.nonDefaults()))
-            contract_id = fill.contract.conId
-            query = self._env.db.collection(f'positions/{self._env.trading_mode}/openOrders')\
-                .where('permId', '==', fill.execution.permId)
-            res = list(query.get())
-            if len(res):
-                order_doc = res[0].reference
-                order = res[0].to_dict()
-            else:
-                # retry with orderId and contractId
-                query = self._env.db.collection(f'positions/{self._env.trading_mode}/openOrders')\
-                    .where('orderId', '==', fill.execution.orderId)\
-                    .where('contractId', '==', contract_id)
-                res = list(query.get())
-                if len(res):
-                    order_doc = res[0].reference
-                    order = res[0].to_dict()
-                else:
-                    continue
+        reconciliation_tasks = [self._reconcile_one_fill(fill) for fill in fills]
+        processed_fills = await asyncio.gather(*reconciliation_tasks)
+        
+        self._activity_log.update(fills=[f for f in processed_fills if f])
+        self._env.logging.info(f'Processed {len(self._activity_log["fills"])} fills.')
 
-            # update holdings if fully executed
-            side = 1 if fill.execution.side == 'BOT' else -1
-            if len(order) and side * fill.execution.cumQty == sum(order['source'].values()):
-                fills.append({
-                    'contract': fill.contract.nonDefaults(),
-                    'execution': util.tree(fill.execution.nonDefaults())
-                })
+        await self._verify_holdings(ib_portfolio)
 
-                for strategy, quantity in order['source'].items():
-                    holdings_doc = self._env.db.document(f'positions/{self._env.trading_mode}/holdings/{strategy}')
-                    holdings = holdings_doc.get().to_dict() or {}
-                    position = holdings.get(str(contract_id), 0)
+        return self._activity_log
 
-                    with self._env.db.transaction() as tx:
-                        action = tx.update if holdings_doc.get().exists else tx.set
-                        action(holdings_doc, {str(contract_id): position + quantity or DELETE_FIELD})
-                        tx.delete(order_doc)
-        self._activity_log.update(fills=fills)
-        self._env.logging.info(f'Fills: {fills}')
+    async def _reconcile_one_fill(self, fill):
+        contract_id = fill.contract.conId
+        order_doc_ref = None
+        order_data = None
 
-        # double-check with IB portfolio
+        # Find the corresponding open order in Firestore
+        query = self._env.db.collection(f'positions/{self._env.trading_mode}/openOrders').where('permId', '==', fill.execution.permId)
+        async for doc in query.stream():
+            order_doc_ref = doc.reference
+            order_data = doc.to_dict()
+            break
+
+        if not order_doc_ref:
+            return None # Order not found, might be from a manual trade
+
+        side = 1 if fill.execution.side == 'BOT' else -1
+        quantity_in_order = sum(order_data['source'].values())
+
+        if side * fill.execution.cumQty == quantity_in_order:
+            self._env.logging.info(f"Reconciling fully filled order for {fill.contract.localSymbol}...")
+            for strategy, quantity in order_data['source'].items():
+                holdings_doc_ref = self._env.db.document(f'positions/{self._env.trading_mode}/holdings/{strategy}')
+                await _update_holdings_and_remove_open_order_async(
+                    self._env.db.transaction(), self._env.db, holdings_doc_ref, order_doc_ref, contract_id, quantity
+                )
+            return fill.execution.nonDefaults()
+        return None
+
+    async def _verify_holdings(self, ib_portfolio):
         self._env.logging.info('Comparing Firestore holdings with IB portfolio...')
-        ib_portfolio = self._env.ibgw.portfolio()
         portfolio = {item.contract.conId: item.position for item in ib_portfolio}
         self._activity_log.update(portfolio={item.contract.localSymbol: item.position for item in ib_portfolio})
-        holdings = [doc.get().to_dict()
-                    for doc in self._env.db.collection(f'positions/{self._env.trading_mode}/holdings').list_documents()]
+        
         holdings_consolidated = {}
-        for h in holdings:
-            for k, v in h.items():
+        holdings_docs = self._env.db.collection(f'positions/{self._env.trading_mode}/holdings').stream()
+        async for doc in holdings_docs:
+            for k, v in doc.to_dict().items():
                 k = int(k)
-                if k in holdings_consolidated:
-                    holdings_consolidated[k] += v
-                else:
-                    holdings_consolidated[k] = v
+                holdings_consolidated[k] = holdings_consolidated.get(k, 0) + v
+        
+        # To prevent errors on empty dicts, create a list of contract details
+        contract_details_coros = [self._env.ibgw.reqContractDetailsAsync(Contract(conId=k)) for k in holdings_consolidated.keys()]
+        contracts_details_list = await asyncio.gather(*contract_details_coros)
+        
+        # Flatten the list of lists and create a mapping from conId to localSymbol
+        conid_to_symbol = {details[0].contract.conId: details[0].contract.localSymbol for details in contracts_details_list if details}
+
         self._activity_log.update(consolidatedHoldings={
-            self._env.ibgw.reqContractDetails(Contract(conId=k))[0].contract.localSymbol: v
-            for k, v in holdings_consolidated.items()
+            conid_to_symbol.get(k, k): v for k, v in holdings_consolidated.items()
         })
+
         if portfolio != holdings_consolidated:
             self._env.logging.warning(f'Holdings do not match -- Firestore: {holdings_consolidated}; IB: {portfolio}')
             raise AssertionError('Holdings in Firestore do not match the ones in IB portfolio.')

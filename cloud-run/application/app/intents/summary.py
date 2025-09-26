@@ -1,22 +1,28 @@
 from intents.intent import Intent
 
-
 class Summary(Intent):
 
     def __init__(self):
         super().__init__()
         self._activity_log = {}  # don't log summary requests
 
-    def _core(self):
+    async def _core(self):
+        # Run all requests in parallel for efficiency
+        portfolio, open_trades, fills, account_summary = await asyncio.gather(
+            self._get_positions(),
+            self._get_trades(),
+            self._get_fills(),
+            self._env.get_account_values_async(self._env.config['account'])
+        )
         return {
-            'accountSummary': self._env.get_account_values(self._env.config['account']),
-            'portfolio': self._get_positions(),
-            'openTrades': self._get_trades(),
-            'fills': self._get_fills()
+            'accountSummary': account_summary,
+            'portfolio': portfolio,
+            'openTrades': open_trades,
+            'fills': fills
         }
 
-    def _get_fills(self):
-        fills = self._env.ibgw.fills()
+    async def _get_fills(self):
+        fills = await self._env.ibgw.reqFillsAsync()
         return {
             fill.contract.localSymbol: [{
                 'side': fill.execution.side,
@@ -30,17 +36,18 @@ class Summary(Intent):
             }] for fill in fills
         }
 
-    def _get_positions(self):
+    async def _get_positions(self):
+        portfolio_items = await self._env.ibgw.reqPortfolioAsync()
         return {
-            portfolio_item.contract.localSymbol: {
-                'position': int(portfolio_item.position),
-                'exposure': round(portfolio_item.marketValue, 2),
-                'uPnL': round(portfolio_item.unrealizedPNL, 2)
-            } for portfolio_item in self._env.ibgw.portfolio()
+            item.contract.localSymbol: {
+                'position': int(item.position),
+                'exposure': round(item.marketValue, 2),
+                'uPnL': round(item.unrealizedPNL, 2)
+            } for item in portfolio_items
         }
 
-    def _get_trades(self):
-        trades = self._env.ibgw.openTrades()
+    async def _get_trades(self):
+        trades = await self._env.ibgw.reqOpenTradesAsync()
         return {
             trade.contract.localSymbol: [{
                 'isActive': trade.isActive(),

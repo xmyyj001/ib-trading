@@ -9,13 +9,10 @@ import falcon.asgi
 import json
 import logging
 from os import environ
-from ib_insync import util
+# import ib_insync.util # No longer needed
 
-# 1. 在所有代码的最开始，打上 asyncio 补丁
-util.patchAsyncio()
-# 使用一个初始的 logger，GcpModule 加载后可能会替换 handler
+# 1. asyncio patch is removed.
 logging.basicConfig(level=logging.INFO)
-logging.info("Asyncio patched for ib_insync.")
 
 # 2. 导入其他模块
 from intents.allocation import Allocation
@@ -45,7 +42,6 @@ ibc_config = {
 }
 
 # 5. 实例化 Environment
-# 这一行将触发所有初始化，包括 GcpModule 的延迟初始化
 Environment(TRADING_MODE, ibc_config)
 
 # 6. 定义 Intents 和 Falcon App
@@ -81,7 +77,8 @@ class Main:
             else:
                 intent_instance = INTENTS[intent](**kwargs)
             
-            result = intent_instance.run()
+            # Await the async run() method
+            result = await intent_instance.run()
             response.status = falcon.HTTP_200
         except BaseException as e: # Catch all exceptions, including SystemExit
             try:
