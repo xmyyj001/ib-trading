@@ -20,30 +20,20 @@ class Environment:
         ENV_VARS = ['K_REVISION', 'PROJECT_ID']
 
         def __init__(self, trading_mode, ibc_config):
-            # 关键：必须先调用父类的构造函数
             super().__init__()
             
             self._env = {k: v for k, v in environ.items() if k in self.ENV_VARS}
             self._trading_mode = trading_mode
             
-            # --- 凭据获取逻辑 (已移除) ---
-            # IB Gateway 的凭据现在通过环境变量在容器启动时由 gatewaystart.sh 使用。
-            # Python 应用不再需要处理登录凭据。
             self._logging.info("IB Gateway authentication is handled by the startup script using environment variables.")
 
-            # --- 配置合并 ---
-            # 我们不再需要合并 'secrets'，因为登录已在外部处理。
             config = {**ibc_config, 'tradingMode': self._trading_mode}
-            
-            # 从环境变量中获取路径，如果不存在则为 None
             config['ibcPath'] = environ.get('IBC_PATH')
             config['twsPath'] = environ.get('TWS_PATH')
             config['ibcIni'] = environ.get('IBC_INI')
             
             self._logging.debug(f"IBGW config (password omitted as it's handled externally): {config}")
 
-            # --- Firestore 调用 ---
-            # self.db 会在第一次被访问时才创建实例，并使用正确的 project_id
             self._logging.info("Fetching configuration from Firestore...")
             common_doc = self.db.document('config/common').get()
             mode_doc = self.db.document(f'config/{self._trading_mode}').get()
@@ -56,13 +46,9 @@ class Environment:
             self._config = {**common_doc.to_dict(), **mode_doc.to_dict()}
             self._logging.info("Successfully loaded configuration from Firestore.")
 
-            # --- IB Gateway 实例化 ---
-            # 关键修复：创建一个包含正确端口的 ib_config 字典
-            # 并将其作为第二个参数传递给 IBGW 的构造函数。
-            ib_connect_config = {
-                'port': self._config.get('apiPort', 4002) # 优先从 Firestore 读取，如果没有则默认为 4002
-            }
-            self._ibgw = IBGW(config, ib_config=ib_connect_config)
+            # Store configs for lazy init, but do not create IBGW instance yet
+            self._ibc_config = config
+            self.__ibgw = None
             util.logToConsole(logging.ERROR)
 
         @property
@@ -75,7 +61,13 @@ class Environment:
 
         @property
         def ibgw(self):
-            return self._ibgw
+            if self.__ibgw is None:
+                self._logging.info("Lazily initializing IBGW instance...")
+                ib_connect_config = {
+                    'port': self._config.get('apiPort', 4002)
+                }
+                self.__ibgw = IBGW(self._ibc_config, ib_config=ib_connect_config)
+            return self.__ibgw
 
         @property
         def logging(self):
@@ -88,18 +80,16 @@ class Environment:
         def get_account_values(self, account, rows=('NetLiquidation', 'CashBalance', 'MaintMarginReq')):
             account_summary = {}
             
-            # 直接获取账户值，ib_insync 的 accountValues 是异步的，但通常会立即返回一个列表
-            # 如果数据为空，则可能是 IB Gateway 尚未完全同步或连接问题
-            account_value = self._ibgw.accountValues(account)
-            self._logging.debug(f"Raw account_value from IBGW: {account_value}") # 添加调试日志
+            account_value = self.ibgw.accountValues(account)
+            self._logging.debug(f"Raw account_value from IBGW: {account_value}")
 
-            if not account_value: # 如果 account_value 为空，则直接返回空字典
+            if not account_value:
                 self._logging.warning(f"IB Gateway returned empty account_value for account {account}. Returning empty summary.")
-                return account_summary # 返回空字典，避免 KeyError
+                return account_summary
 
             try:
                 account_values = util.df(account_value).set_index(['tag', 'currency']).loc[list(rows), 'value']
-                self._logging.debug(f"Processed account_values DataFrame: {account_values}") # 添加调试日志
+                self._logging.debug(f"Processed account_values DataFrame: {account_values}")
             except KeyError as e:
                 self._logging.error(f"KeyError during account_values processing: {e}. Raw data: {account_value}")
                 raise e
