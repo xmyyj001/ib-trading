@@ -77,10 +77,10 @@ class Environment:
         def trading_mode(self):
             return self._trading_mode
 
-        def get_account_values(self, account, rows=('NetLiquidation', 'CashBalance', 'MaintMarginReq')):
+        async def get_account_values_async(self, account, rows=('NetLiquidation', 'CashBalance', 'MaintMarginReq')):
             account_summary = {}
             
-            account_value = self.ibgw.accountValues(account)
+            account_value = await self.ibgw.reqAccountValuesAsync(account)
             self._logging.debug(f"Raw account_value from IBGW: {account_value}")
 
             if not account_value:
@@ -88,13 +88,24 @@ class Environment:
                 return account_summary
 
             try:
-                account_values = util.df(account_value).set_index(['tag', 'currency']).loc[list(rows), 'value']
-                self._logging.debug(f"Processed account_values DataFrame: {account_values}")
+                df = util.df(account_value)
+                if df.empty:
+                    return account_summary
+                
+                account_values_df = df.set_index(['tag', 'currency'])
+                
+                existing_rows = [row for row in rows if row in account_values_df.index.get_level_values('tag')]
+                if not existing_rows:
+                    return account_summary
+
+                processed_values = account_values_df.loc[existing_rows, 'value']
+                self._logging.debug(f"Processed account_values DataFrame: {processed_values}")
+
             except KeyError as e:
                 self._logging.error(f"KeyError during account_values processing: {e}. Raw data: {account_value}")
                 raise e
             
-            for (k, c), v in account_values.items():
+            for (k, c), v in processed_values.items():
                 if c != 'BASE':
                     if k in account_summary:
                         account_summary[k][c] = float(v)
