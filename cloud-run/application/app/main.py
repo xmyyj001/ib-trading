@@ -9,9 +9,10 @@ import falcon.asgi
 import json
 import logging
 from os import environ
-# import ib_insync.util # No longer needed
+from ib_insync import util
 
-# 1. asyncio patch is removed.
+# 1. Restore the asyncio patch. This is critical for ib_insync to work in an ASGI server.
+util.patchAsyncio()
 logging.basicConfig(level=logging.INFO)
 
 # 2. 导入其他模块
