@@ -22,7 +22,7 @@ class Dummy(Strategy):
         self._register_contracts(self._instruments['spy'][0])
 
     def _setup(self):
-        from lib.trading import InstrumentSet
+        from lib.trading import InstrumentSet, Stock
         self._instruments = {
             'spy': InstrumentSet(Stock('SPY', 'ARCA', 'USD'))
         }

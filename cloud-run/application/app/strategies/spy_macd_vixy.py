@@ -1,7 +1,6 @@
 import pandas as pd
 from ib_insync import util
 from strategies.strategy import Strategy
-from lib.trading import Stock
 
 class SpyMacdVixy(Strategy):
     """
@@ -14,6 +13,7 @@ class SpyMacdVixy(Strategy):
         """
         Define the instruments required for this strategy.
         """
+        from lib.trading import Stock
         self._env.logging.info("Setting up SpyMacdVixy strategy instruments...")
         self.spy = Stock('SPY', 'ARCA', 'USD')
         self.vixy = Stock('VIXY', 'BATS', 'USD')
