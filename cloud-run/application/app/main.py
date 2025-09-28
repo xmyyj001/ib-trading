@@ -1,5 +1,4 @@
 import asyncio
-from contextlib import asynccontextmanager
 from datetime import datetime
 import falcon
 import falcon.asgi
@@ -19,49 +18,48 @@ from intents.trade_reconciliation import TradeReconciliation
 from intents.reconcile import Reconcile
 from lib.environment import Environment
 
-# --- 1. Lifespan Manager: The Core of the New Architecture ---
-@asynccontextmanager
-async def lifespan(scope, events):
-    """
-    Manages the application's startup and shutdown logic.
-    This runs ONCE per worker process, on the correct event loop.
-    """
-    logging.info("Lifespan startup: Initializing application...")
-    
-    # --- A. Apply asyncio patch at the very beginning ---
-    logging.info("Lifespan startup: Applying asyncio patch for ib_insync...")
-    util.patchAsyncio()
+# --- 1. Lifespan Middleware (Official Falcon Pattern) ---
+class IBGatewayManager:
+    """A middleware class to manage the IB Gateway connection lifecycle."""
 
-    # --- B. Initialize Environment and IB Gateway Connection ---
-    TRADING_MODE = environ.get('TRADING_MODE', 'paper')
-    TWS_VERSION = environ.get('TWS_VERSION')
-    if not TWS_VERSION:
-        raise ValueError("FATAL: TWS_VERSION environment variable is not set!")
-    
-    logging.info(f"Lifespan startup: Starting in {TRADING_MODE} mode for TWS version {TWS_VERSION}.")
-    
-    ibc_config = {'gateway': True, 'twsVersion': TWS_VERSION}
-    
-    # Instantiate the global Environment object
-    env = Environment(TRADING_MODE, ibc_config)
-    
-    # Establish the persistent connection to IB Gateway
-    try:
-        logging.info("Lifespan startup: Connecting to IB Gateway...")
-        await env.ibgw.start_and_connect_async()
-        logging.info("Lifespan startup: Successfully connected to IB Gateway.")
-    except Exception as e:
-        logging.critical(f"FATAL: Lifespan connection to IB Gateway failed: {e}", exc_info=True)
-    
-    # --- C. Yield control to the application ---
-    yield
-    
-    # --- D. Shutdown Logic ---
-    logging.info("Lifespan shutdown: Disconnecting from IB Gateway...")
-    if env.ibgw.isConnected():
-        await env.ibgw.stop_and_terminate_async()
-    logging.info("Lifespan shutdown: Disconnection complete.")
+    async def process_startup(self, scope, event):
+        """
+        Called once per worker process when the application starts.
+        """
+        logging.info("Lifespan: Startup - Initializing application...")
+        
+        logging.info("Lifespan: Startup - Applying asyncio patch for ib_insync...")
+        util.patchAsyncio()
 
+        TRADING_MODE = environ.get('TRADING_MODE', 'paper')
+        TWS_VERSION = environ.get('TWS_VERSION')
+        if not TWS_VERSION:
+            raise ValueError("FATAL: TWS_VERSION environment variable is not set!")
+        
+        logging.info(f"Lifespan: Startup - Starting in {TRADING_MODE} mode for TWS version {TWS_VERSION}.")
+        
+        ibc_config = {'gateway': True, 'twsVersion': TWS_VERSION}
+        
+        # Instantiate the global Environment singleton
+        # This also lazily prepares the ibgw instance
+        self.env = Environment(TRADING_MODE, ibc_config)
+        
+        try:
+            logging.info("Lifespan: Startup - Connecting to IB Gateway...")
+            await self.env.ibgw.start_and_connect_async()
+            logging.info("Lifespan: Startup - Successfully connected to IB Gateway.")
+        except Exception as e:
+            logging.critical(f"FATAL: Lifespan connection to IB Gateway failed: {e}", exc_info=True)
+            # In a real scenario, this should cause the service to fail its health check
+
+    async def process_shutdown(self, scope, event):
+        """
+        Called once per worker process when the application shuts down.
+        """
+        logging.info("Lifespan: Shutdown - Disconnecting from IB Gateway...")
+        if hasattr(self, 'env') and self.env.ibgw.isConnected():
+            await self.env.ibgw.stop_and_terminate_async()
+        logging.info("Lifespan: Shutdown - Disconnection complete.")
 
 # --- 2. Falcon App Definition ---
 logging.basicConfig(level=logging.INFO)
@@ -95,7 +93,7 @@ class Main:
                 raise ValueError(f"Unknown intent received: {intent}")
             
             intent_instance = INTENTS[intent](**kwargs)
-            result = await intent_instance.run() # This now assumes connection is ready
+            result = await intent_instance.run()
             response.status = falcon.HTTP_200
         except BaseException as e:
             logging.exception("An error occurred while processing the intent:")
@@ -108,8 +106,7 @@ class Main:
         response.text = json.dumps(result) + '\n'
 
 # --- 3. Instantiate the App and Add Middleware ---
-app = falcon.asgi.App()
-lifespan_middleware = falcon.asgi.Lifespan(lifespan)
-app.add_middleware(lifespan_middleware)
+app = falcon.asgi.App(middleware=[
+    IBGatewayManager()
+])
 app.add_route('/{intent}', Main())
-
