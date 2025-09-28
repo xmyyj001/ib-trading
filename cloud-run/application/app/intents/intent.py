@@ -59,8 +59,6 @@ class Intent:
             self._activity_log.update(exception=error_str)
             exc = e
         
-        # Logging happens regardless of success or failure, but outside the main try/except
-        # to ensure it doesn't interfere with exception propagation.
         if self._env.env.get('K_REVISION', 'localhost') != 'localhost':
             self._log_activity()
         

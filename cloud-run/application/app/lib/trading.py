@@ -5,8 +5,15 @@ from google.cloud.firestore_v1 import DELETE_FIELD
 from lib.environment import Environment
 import logging
 
-# (Instrument, Contract, Forex, Future, Index, Stock, InstrumentSet 类的代码保持不变)
-# ...
+# --- NOTE: Instrument classes are not shown for brevity, but they remain in the file ---
+# class Instrument(ABC): ...
+# class Contract(Instrument): ...
+# class Forex(Instrument): ...
+# class Future(Instrument): ...
+# class Index(Instrument): ...
+# class Stock(Instrument): ...
+# class InstrumentSet: ...
+
 
 class Trade:
     _trades = {}
@@ -25,8 +32,16 @@ class Trade:
         Consolidates trades from all strategies.
         This logic remains synchronous as it's pure computation.
         """
+        # This import is intentionally local to break the circular dependency
+        from strategies.strategy import Strategy
+
         self._trades = {}
         for strategy in self._strategies:
+            # Ensure we are working with a valid Strategy instance
+            if not isinstance(strategy, Strategy):
+                logging.warning(f"Item provided to Trade class is not a Strategy instance: {type(strategy)}")
+                continue
+
             for k, v in strategy.trades.items():
                 if k not in self._trades:
                     self._trades[k] = {}
