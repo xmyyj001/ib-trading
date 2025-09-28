@@ -26,11 +26,12 @@ class Intent:
         # Now assumes connection is ready.
         return {'currentTime': (await self._env.ibgw.reqCurrentTimeAsync()).isoformat()}
 
-    def _log_activity(self):
+    async def _log_activity_async(self):
         if len(self._activity_log):
             try:
                 self._activity_log.update(timestamp=datetime.utcnow())
-                self._env.db.collection('activity').document().set(self._activity_log)
+                # Firestore client in gcp.py should be async, assuming it is:
+                await self._env.db.collection('activity').document().set(self._activity_log)
             except Exception as e:
                 self._env.logging.error(f"Failed to log activity: {e}", exc_info=True)
                 self._env.logging.info(self._activity_log)
@@ -58,9 +59,9 @@ class Intent:
             logging.error(f"Exception in intent run: {error_str}", exc_info=True)
             self._activity_log.update(exception=error_str)
             exc = e
-        
-        if self._env.env.get('K_REVISION', 'localhost') != 'localhost':
-            self._log_activity()
+        finally:
+            if self._env.env.get('K_REVISION', 'localhost') != 'localhost':
+                await self._log_activity_async()
         
         if exc is not None:
             raise exc # Re-raise the exception to be caught by main.py for 500 response

@@ -1,11 +1,11 @@
 import asyncio
-from google.cloud.firestore_v1.transaction import transactional_async
+from google.cloud.firestore_v1.async_transaction import async_transactional
 from google.cloud.firestore_v1 import DELETE_FIELD
 from ib_insync import Contract, util
 from intents.intent import Intent
 import logging
 
-@transactional_async
+@async_transactional
 async def _update_holdings_and_remove_open_order_async(transaction, holdings_doc_ref, order_doc_ref, contract_id, quantity):
     """
     Atomically updates holdings and removes the open order document in a single transaction.
