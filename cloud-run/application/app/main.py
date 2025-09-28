@@ -1,20 +1,14 @@
-# ===================================================================
-# == FINAL GOLDEN CODE: main.py
-# == Patches asyncio and uses simplified, robust startup logic.
-# ===================================================================
-
+import asyncio
+from contextlib import asynccontextmanager
 from datetime import datetime
 import falcon
 import falcon.asgi
 import json
 import logging
 from os import environ
-# from ib_insync import util # No longer needed and causes conflicts
 
-# 1. asyncio patch is definitively removed.
-logging.basicConfig(level=logging.INFO)
+from ib_insync import util
 
-# 2. 导入其他模块
 from intents.allocation import Allocation
 from intents.cash_balancer import CashBalancer
 from intents.close_all import CloseAll
@@ -25,37 +19,66 @@ from intents.trade_reconciliation import TradeReconciliation
 from intents.reconcile import Reconcile
 from lib.environment import Environment
 
-# 3. 简化并加固环境变量处理
-TRADING_MODE = environ.get('TRADING_MODE', 'paper')
-TWS_VERSION = environ.get('TWS_VERSION') 
-if not TWS_VERSION:
-    raise ValueError("FATAL: TWS_VERSION environment variable is not set!")
-if TRADING_MODE not in ['live', 'paper']:
-    raise ValueError('Unknown trading mode')
+# --- 1. Lifespan Manager: The Core of the New Architecture ---
+@asynccontextmanager
+async def lifespan(app: falcon.asgi.App):
+    """
+    Manages the application's startup and shutdown logic.
+    This runs ONCE per worker process, on the correct event loop.
+    """
+    logging.info("Lifespan startup: Initializing application...")
+    
+    # --- A. Apply asyncio patch at the very beginning ---
+    logging.info("Lifespan startup: Applying asyncio patch for ib_insync...")
+    util.patchAsyncio()
 
-logging.info(f"Starting application in {TRADING_MODE} mode for TWS version {TWS_VERSION}.")
+    # --- B. Initialize Environment and IB Gateway Connection ---
+    TRADING_MODE = environ.get('TRADING_MODE', 'paper')
+    TWS_VERSION = environ.get('TWS_VERSION')
+    if not TWS_VERSION:
+        raise ValueError("FATAL: TWS_VERSION environment variable is not set!")
+    
+    logging.info(f"Lifespan startup: Starting in {TRADING_MODE} mode for TWS version {TWS_VERSION}.")
+    
+    ibc_config = {'gateway': True, 'twsVersion': TWS_VERSION}
+    
+    # Instantiate the global Environment object
+    env = Environment(TRADING_MODE, ibc_config)
+    
+    # Establish the persistent connection to IB Gateway
+    try:
+        logging.info("Lifespan startup: Connecting to IB Gateway...")
+        await env.ibgw.start_and_connect_async()
+        logging.info("Lifespan startup: Successfully connected to IB Gateway.")
+    except Exception as e:
+        logging.critical(f"FATAL: Lifespan connection to IB Gateway failed: {e}", exc_info=True)
+        # In a real scenario, you might want to exit or have a health check fail.
+    
+    # --- C. Yield control to the application ---
+    # The application will now start serving requests.
+    yield
+    
+    # --- D. Shutdown Logic ---
+    logging.info("Lifespan shutdown: Disconnecting from IB Gateway...")
+    if env.ibgw.isConnected():
+        await env.ibgw.stop_and_terminate_async()
+    logging.info("Lifespan shutdown: Disconnection complete.")
 
-# 4. 简化 ibc_config 构建
-ibc_config = {
-    'gateway': True,
-    'twsVersion': TWS_VERSION
-}
 
-# 5. 实例化 Environment
-Environment(TRADING_MODE, ibc_config)
+# --- 2. Falcon App Definition ---
+logging.basicConfig(level=logging.INFO)
 
-# 6. 定义 Intents 和 Falcon App
 INTENTS = {
     'allocation': Allocation,
     'cash-balancer': CashBalancer,
     'close-all': CloseAll,
     'collect-market-data': CollectMarketData,
     'summary': Summary,
-    'trade-reconciliation': TradeReconciliation
+    'trade-reconciliation': TradeReconciliation,
+    'reconcile': Reconcile
 }
 
 class Main:
-    """Main Falcon route handler."""
     async def on_get(self, request, response, intent):
         await self._on_request(request, response, intent)
 
@@ -68,25 +91,16 @@ class Main:
 
     @staticmethod
     async def _on_request(_, response, intent, **kwargs):
-        """Handles the HTTP request by dispatching to the correct intent."""
         result = {}
         try:
             if intent is None or intent not in INTENTS.keys():
-                logging.warning(f"Unknown intent received: {intent}")
-                intent_instance = Intent()
-            else:
-                intent_instance = INTENTS[intent](**kwargs)
+                raise ValueError(f"Unknown intent received: {intent}")
             
-            # Await the async run() method
-            result = await intent_instance.run()
+            intent_instance = INTENTS[intent](**kwargs)
+            result = await intent_instance.run() # This now assumes connection is ready
             response.status = falcon.HTTP_200
-        except BaseException as e: # Catch all exceptions, including SystemExit
-            try:
-                from lib.gcp import logger as gcp_logger
-                gcp_logger.exception("An error occurred while processing the intent:")
-            except ImportError:
-                logging.exception("An error occurred while processing the intent:")
-            
+        except BaseException as e:
+            logging.exception("An error occurred while processing the intent:")
             error_str = f'{e.__class__.__name__}: {e}'
             result = {'error': error_str}
             response.status = falcon.HTTP_500
@@ -95,6 +109,6 @@ class Main:
         response.content_type = falcon.MEDIA_JSON
         response.text = json.dumps(result) + '\n'
 
-# Instantiate Falcon App
-app = falcon.asgi.App()
+# --- 3. Instantiate the App with the Lifespan Manager ---
+app = falcon.asgi.App(lifespan=lifespan)
 app.add_route('/{intent}', Main())

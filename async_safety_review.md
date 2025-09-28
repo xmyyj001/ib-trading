@@ -1,121 +1,125 @@
-# 架构排查与异步安全加固计划 (最终版 v3 - 已解决事件循环问题)
+# 架构升级回顾与最终异步模型 (v4 - 最终版)
 
 **身份**: Google Cloud 架构师
-**目标**: 根除因`asyncio`事件循环冲突导致的`RuntimeError`，确保系统在Gunicorn/Uvicorn环境下的异步稳定性。
+**目标**: 本文档旨在记录项目从“同步-异步混合”模式升级为“基于ASGI Lifespan的完全异步”模式的最终架构，并阐明其设计理念与执行流程。
 
-## 1. 核心问题诊断: `RuntimeError: ... attached to a different loop`
+## 1. 问题陈述: `RuntimeError: ... attached to a different loop`
 
-在审阅了您最新的代码和详细的错误日志后，问题根源已非常明确：**`ib_insync`库在错误的时机被初始化，导致其绑定的事件循环与处理API请求的Uvicorn工作进程的事件循环不一致。**
+在将系统改造为异步的过程中，我们遇到了一个致命的 `RuntimeError`。其根源在于 `ib_insync` 库的初始化（特别是`patchAsyncio`）在Gunicorn的主进程中被触发，而API请求是在一个拥有独立事件循环的Uvicorn工作进程中被处理，导致了事件循环冲突，使应用无法启动。
 
-这是一个在 `asyncio` 与多进程WSGI服务器（如Gunicorn）集成时非常典型的“坑”。主进程和工作进程拥有不同的事件循环，任何在模块加载时（主进程阶段）就进行初始化的异步库，都会在工作进程中调用时产生冲突。
+## 2. 最终解决方案: ASGI Lifespan 持久化连接模型
 
-## 2. 解决方案: 延迟初始化 (Lazy Initialization)
+为根除此问题，我们采用并实施了 ASGI Lifespan Protocol。这是一种现代Python Web框架（如Falcon, FastAPI, Starlette）管理后台资源（如数据库连接、消息队列、或本项目的IB Gateway连接）的标准最佳实践。
 
-解决方案是**将`ib_insync`的初始化工作，从“模块加载时”推迟到“代码运行时”**。我们必须确保 `util.patchAsyncio()` 这个关键的初始化函数，在处理具体API请求的那个工作进程中被调用，而且只被调用一次。
+**核心理念**: 将连接的建立和断开，从“每个请求处理时”转移到“每个工作进程生命周期开始和结束时”。
 
-幸运的是，您当前的架构（`main.py`中已移除全局patch，`intent.py`作为所有业务逻辑的入口）为实施此方案提供了完美的“手术点”。
+**实现方式**: 我们在 `main.py` 中实现了一个 `lifespan` 上下文管理器，并将其注入到 `falcon.asgi.App` 中。它的工作流程如下：
+
+1.  **应用启动时 (Startup)**: Gunicorn启动一个Uvicorn工作进程后，`lifespan` 函数会立即在**该工作进程的事件循环上**执行 `yield` 之前的代码。
+    *   它首先执行 `util.patchAsyncio()`，确保 `ib_insync` 在正确的循环中被初始化。
+    *   然后，它调用 `env.ibgw.start_and_connect_async()`，建立一个到IB Gateway的**持久化TCP连接**。
+    *   这个连接在此后将一直保持，供该工作进程处理的所有后续请求复用。
+
+2.  **应用运行时 (Serving)**: `lifespan` 函数 `yield` 控制权，应用开始接收和处理API请求。所有业务逻辑（Intents）现在都可以假设一个稳定、可用的 `ibgw` 连接已准备就绪。
+
+3.  **应用关闭时 (Shutdown)**: 当Gunicorn决定关闭这个工作进程时，`lifespan` 函数会执行 `yield` 之后的代码，即调用 `env.ibgw.stop_and_terminate_async()`，优雅地断开连接并清理资源。
 
 ---
 
-## 3. 最终代码修复建议
+## 3. 最终架构下的代码实现与调用流程
 
-我们将对`intent.py`进行一次精确的修改，将`patchAsyncio`的调用注入到`run`方法的开头，并使用一个全局标志位确保它在每个进程中只运行一次。
+### 3.1 核心实现代码
 
-### **修改文件**: `cloud-run/application/app/intents/intent.py`
+以下是新架构下两个最核心文件的最终实现代码，作为本项目的技术基准。
 
-**修改说明**:
-1.  **引入 `ib_insync.util`**: 我们需要再次导入这个模块。
-2.  **增加全局标志位**: `_asyncio_patched = False` 用于跟踪当前进程是否已执行过patch。
-3.  **在 `run` 方法中执行Patch**: 在 `run` 方法的开头，检查该标志位。如果是 `False`，则执行 `util.patchAsyncio()` 并将标志位设为 `True`。
-
-这将确保在处理第一个API请求时，`ib_insync` 会在正确的Uvicorn工作进程的事件循环中完成初始化。后续同一进程中的请求会直接跳过，避免重复执行。
-
-**完整代码**:
-
+**`main.py` (生命周期管理器)**
 ```python
-# cloud-run/application/app/intents/intent.py
-
-import json
-from datetime import datetime
-from hashlib import md5
-
+import asyncio
+from contextlib import asynccontextmanager
+# ... other imports
+from ib_insync import util
 from lib.environment import Environment
-from ib_insync import util # <--- 1. 重新导入
 
-# 2. 增加一个全局标志位来跟踪patch状态
-_asyncio_patched = False
+@asynccontextmanager
+async def lifespan(app: falcon.asgi.App):
+    logging.info("Lifespan startup: Initializing application...")
+    logging.info("Lifespan startup: Applying asyncio patch for ib_insync...")
+    util.patchAsyncio()
+
+    # ... (Initialize Environment) ...
+    env = Environment(TRADING_MODE, ibc_config)
+    
+    try:
+        logging.info("Lifespan startup: Connecting to IB Gateway...")
+        await env.ibgw.start_and_connect_async()
+        logging.info("Lifespan startup: Successfully connected to IB Gateway.")
+    except Exception as e:
+        logging.critical(f"FATAL: Lifespan connection to IB Gateway failed: {e}", exc_info=True)
+    
+    yield
+    
+    logging.info("Lifespan shutdown: Disconnecting from IB Gateway...")
+    if env.ibgw.isConnected():
+        await env.ibgw.stop_and_terminate_async()
+    logging.info("Lifespan shutdown: Disconnection complete.")
+
+# ... (Main handler class)
+
+app = falcon.asgi.App(lifespan=lifespan)
+app.add_route('/{intent}', Main())
+```
+
+**`intent.py` (纯业务逻辑处理器)**
+```python
+import logging
+from lib.environment import Environment
 
 class Intent:
-
-    _activity_log = {}
-
-    def __init__(self, **kwargs):
-        self._env = Environment()
-        hashstr = self._env.env.get('K_REVISION', 'localhost') + self.__class__.__name__ + json.dumps(kwargs, sort_keys=True)
-        self._signature = md5(hashstr.encode()).hexdigest()
-        self._activity_log = {
-            'agent': self._env.env.get('K_REVISION', 'localhost'),
-            'config': self._env.config,
-            'exception': None,
-            'intent': self.__class__.__name__,
-            'signature': self._signature,
-            'tradingMode': self._env.trading_mode
-        }
+    # ... (__init__)
 
     async def _core(self):
+        # Assumes connection is ready.
         return {'currentTime': (await self._env.ibgw.reqCurrentTimeAsync()).isoformat()}
 
-    def _log_activity(self):
-        if len(self._activity_log):
-            try:
-                self._activity_log.update(timestamp=datetime.utcnow())
-                self._env.db.collection('activity').document().set(self._activity_log)
-            except Exception as e:
-                self._env.logging.error(e)
-                self._env.logging.info(self._activity_log)
-
     async def run(self):
-        global _asyncio_patched
-        # --- 3. 在运行时执行Patch --- 
-        if not _asyncio_patched:
-            self._env.logging.info("Applying asyncio patch for ib_insync in worker process...")
-            util.patchAsyncio()
-            _asyncio_patched = True
-        # --- END PATCH --- 
-
         retval = {}
         exc = None
         try:
             if not self._env.config.get('tradingEnabled', True):
                 raise SystemExit("Trading is globally disabled by kill switch.")
             
-            await self._env.ibgw.start_and_connect_async()
             self._env.ibgw.reqMarketDataType(self._env.config['marketDataType'])
             retval = await self._core()
+
         except BaseException as e:
-            error_str = f'{e.__class__.__name__}: {e}'
-            self._env.logging.error(error_str)
-            self._activity_log.update(exception=error_str)
+            # ... (error handling)
             exc = e
         finally:
-            if self._env.ibgw.isConnected():
-                await self._env.ibgw.stop_and_terminate_async()
-            
-            if self._env.env.get('K_REVISION', 'localhost') != 'localhost':
-                self._log_activity()
-            
-            if exc is not None:
-                raise exc
-
-        self._env.logging.info('Done.')
-        if 'timestamp' in self._activity_log and isinstance(self._activity_log['timestamp'], datetime):
-            self._activity_log['timestamp'] = self._activity_log['timestamp'].isoformat()
-            
+            # Connection is no longer managed here.
+            self._log_activity()
+        
+        if exc is not None:
+            raise exc
+        
         return retval or self._activity_log
 ```
 
+### 3.2 异步调用流程
+
+一个API请求（如 `/allocation`）在当前架构下的完整生命周期如下：
+
+1.  **启动**: Cloud Run 实例启动 -> Gunicorn 主进程启动 -> Uvicorn 工作进程启动。
+2.  **Lifespan (Startup)**: `lifespan` 函数在工作进程中执行，完成 `patchAsyncio` 和 `ibgw.start_and_connect_async()`。
+3.  **等待请求**: 应用建立长连接后，开始监听HTTP请求。
+4.  **请求进入**: `curl` 命令发送的 `/allocation` 请求抵达。
+5.  **`main.py`**: `Main` 处理器接收请求，并调用 `Allocation` 意图的 `run()` 方法。
+6.  **`intent.py`**: `Allocation` 实例的 `run()` 方法被执行。它**不再需要管理连接**，直接进入 `_core()` 业务逻辑。
+7.  **`allocation.py`**: `_core()` 方法调用 `trading.py` 中的 `place_orders_async()`。
+8.  **`trading.py`**: `place_orders_async()` 使用**已存在的 `ibgw` 连接**，通过 `asyncio.gather` 并发地发送所有下单请求，并异步等待券商的 `Submitted` 状态确认。
+9.  **返回响应**: 所有异步操作完成后，结果逐层返回，最终由 `main.py` 封装成JSON响应返回给 `curl`。
+10. **持续服务**: 应用保持连接，继续等待下一个API请求。
+11. **关闭**: 当Cloud Run决定缩容或关闭实例时，`lifespan` 的 `shutdown` 部分被触发，安全断开与IB Gateway的连接。
+
 ## 4. 结论
 
-实施此项修改后，`RuntimeError: ... attached to a different loop` 的问题将被彻底解决。`ib_insync` 将能够安全、正确地在Gunicorn/Uvicorn管理的多进程环境中运行，您的异步改造也将完成最关键的一步。
-
-您可以将上述代码直接更新到您的 `intent.py` 文件中，然后重新部署服务进行测试。
+通过本次架构升级，系统完成了从“同步/混合模式”到“基于Lifespan的完全异步模式”的蜕变。这不仅从根本上解决了事件循环冲突的 `RuntimeError`，还通过连接复用提升了性能，并通过责任分离简化了代码，使系统达到了一个真正生产级的健壮、高效和可维护的水平。

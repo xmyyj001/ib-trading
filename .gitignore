@@ -7,4 +7,3 @@ docker-compose.yml
 *.pyc
 
 # Private deployment variables
-deployment_vars.sh
