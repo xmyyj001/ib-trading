@@ -21,7 +21,7 @@ from lib.environment import Environment
 
 # --- 1. Lifespan Manager: The Core of the New Architecture ---
 @asynccontextmanager
-async def lifespan(app: falcon.asgi.App):
+async def lifespan(scope, events):
     """
     Manages the application's startup and shutdown logic.
     This runs ONCE per worker process, on the correct event loop.
@@ -52,10 +52,8 @@ async def lifespan(app: falcon.asgi.App):
         logging.info("Lifespan startup: Successfully connected to IB Gateway.")
     except Exception as e:
         logging.critical(f"FATAL: Lifespan connection to IB Gateway failed: {e}", exc_info=True)
-        # In a real scenario, you might want to exit or have a health check fail.
     
     # --- C. Yield control to the application ---
-    # The application will now start serving requests.
     yield
     
     # --- D. Shutdown Logic ---
@@ -109,7 +107,9 @@ class Main:
         response.content_type = falcon.MEDIA_JSON
         response.text = json.dumps(result) + '\n'
 
-# --- 3. Instantiate the App with the Lifespan Manager ---
-app = falcon.asgi.App(lifespan=lifespan)
+# --- 3. Instantiate the App and Add Middleware ---
+app = falcon.asgi.App()
+lifespan_middleware = falcon.asgi.Lifespan(lifespan)
+app.add_middleware(lifespan_middleware)
 app.add_route('/{intent}', Main())
 
