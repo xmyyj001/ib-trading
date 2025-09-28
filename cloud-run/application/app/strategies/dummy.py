@@ -1,53 +1,36 @@
 from random import randint
-
-from ib_insync import Stock # 导入 Stock 类
-from lib.trading import InstrumentSet # 仅导入 InstrumentSet
+from ib_insync import Stock
 from strategies.strategy import Strategy
 
-
 class Dummy(Strategy):
-
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
     def _get_signals(self):
-        # 确保 _instruments['spy'] 存在且不为空
         if not self._instruments.get('spy') or not self._instruments['spy'].constituents:
             self._env.logging.warning("No valid 'spy' contracts found. Skipping signal generation.")
             self._signals = {}
             return
-
-        # 使用 SPY 的合约 ID
-        allocation = {
-            self._instruments['spy'][0].contract.conId: randint(-1, 1)
-        }
-        self._env.logging.debug(f'Allocation: {allocation}')
-        self._signals = allocation
-        # register allocation contracts so that they don't have to be created again
-        self._register_contracts(self._instruments['spy'][0]) # 更改为 'spy'
+        spy_contract = self._instruments['spy'][0].contract
+        if not spy_contract:
+            self._env.logging.error("SPY contract details not available.")
+            self._signals = {}
+            return
+        weight = randint(-1, 1)
+        price = self._instruments['spy'][0].tickers.close if self._instruments['spy'][0].tickers else 0
+        self._signals = { spy_contract.conId: (weight, price) }
+        self._register_contracts(self._instruments['spy'][0])
 
     def _setup(self):
-        # 更改为获取 SPY ETF 合约
+        from lib.trading import InstrumentSet
         self._instruments = {
-            'spy': InstrumentSet(Stock('SPY', 'ARCA', 'USD')) # 使用 Stock 类
+            'spy': InstrumentSet(Stock('SPY', 'ARCA', 'USD'))
         }
-        # 确保合约详情已获取
         if self._instruments['spy'].constituents:
-            self._instruments['spy'].constituents[0].get_contract_details()
-            if not self._instruments['spy'].constituents[0].contract:
-                self._env.logging.error("Failed to get contract details for SPY. Check IB Gateway connection and market data permissions.")
-                self._instruments['spy'] = None # 标记为无效，防止后续错误
-
-
-if __name__ == '__main__':
-    from lib.environment import Environment
-
-    env = Environment()
-    env.ibgw.connect(port=4001)
-    env.ibgw.reqMarketDataType(2)
-    try:
-        Dummy(base_currency='CHF', exposure=1, net_liquidation=100000)
-    except Exception as e:
-        raise e
-    finally:
-        env.ibgw.disconnect()
+            spy_inst = self._instruments['spy'].constituents[0]
+            spy_inst.get_contract_details()
+            if spy_inst.contract:
+                 spy_inst.get_tickers()
+            else:
+                self._env.logging.error("Failed to get contract details for SPY.")
+                self._instruments['spy'] = None

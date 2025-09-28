@@ -1,19 +1,94 @@
 import asyncio
-from datetime import datetime, timezone
+import logging
+from abc import ABC
+from datetime import datetime, timedelta, timezone
 import ib_insync
 from google.cloud.firestore_v1 import DELETE_FIELD
 from lib.environment import Environment
-import logging
+from lib.gcp import GcpModule
 
-# --- NOTE: Instrument classes are not shown for brevity, but they remain in the file ---
-# class Instrument(ABC): ...
-# class Contract(Instrument): ...
-# class Forex(Instrument): ...
-# class Future(Instrument): ...
-# class Index(Instrument): ...
-# class Stock(Instrument): ...
-# class InstrumentSet: ...
+class Instrument(ABC):
+    IB_CLS = None
+    _contract = None
+    _details = None
+    _local_symbol = None
+    _tickers = None
 
+    def __init__(self, get_tickers=False, **kwargs):
+        self._ib_contract = self.IB_CLS(**kwargs)
+        self._env = Environment()
+        self.get_contract_details()
+        if get_tickers:
+            self.get_tickers()
+
+    @property
+    def contract(self):
+        return self._contract
+
+    @property
+    def details(self):
+        return self._details
+
+    @property
+    def local_symbol(self):
+        return self._local_symbol
+
+    @property
+    def tickers(self):
+        return self._tickers
+
+    def get_contract_details(self):
+        if self._ib_contract and hasattr(self._ib_contract, 'symbol'):
+            try:
+                details_list = self._env.ibgw.reqContractDetails(self._ib_contract)
+                if details_list:
+                    details = details_list[0].nonDefaults()
+                    self._contract = details.pop('contract')
+                    self._local_symbol = self._contract.localSymbol
+                    self._details = details
+            except Exception as e:
+                self._env.logging.error(f"Error fetching contract details for {self._ib_contract.symbol}: {e}")
+
+    def get_tickers(self):
+        if self._contract:
+            self._env.logging.info(f'Requesting tick data for {self._local_symbol}...')
+            try:
+                tickers = self._env.ibgw.reqTickers(self._contract)
+                if tickers:
+                    self._tickers = tickers[0]
+            except Exception as e:
+                self._env.logging.error(f"Error fetching tickers for {self._local_symbol}: {e}")
+
+class Contract(Instrument):
+    IB_CLS = ib_insync.Contract
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+class Forex(Instrument):
+    IB_CLS = ib_insync.Forex
+    def __init__(self, pair, **kwargs):
+        super().__init__(pair=pair, **kwargs)
+
+class Stock(Instrument):
+    IB_CLS = ib_insync.Stock
+    def __init__(self, symbol, exchange, currency, **kwargs):
+        super().__init__(symbol=symbol, exchange=exchange, currency=currency, **kwargs)
+
+class InstrumentSet:
+    def __init__(self, *args):
+        if not all(isinstance(a, Instrument) for a in args):
+            raise TypeError('Not all arguments are of type Instrument')
+        self._constituents = args
+        self._env = Environment()
+    
+    @property
+    def contracts(self):
+        return [c.contract for c in self._constituents if c.contract]
+
+    def get_tickers(self):
+        valid_contracts = self.contracts
+        if valid_contracts:
+            pass
 
 class Trade:
     _trades = {}
@@ -28,35 +103,24 @@ class Trade:
         return self._trades
 
     def consolidate_trades(self):
-        """
-        Consolidates trades from all strategies.
-        This logic remains synchronous as it's pure computation.
-        """
-        # This import is intentionally local to break the circular dependency
         from strategies.strategy import Strategy
-
         self._trades = {}
         for strategy in self._strategies:
-            # Ensure we are working with a valid Strategy instance
             if not isinstance(strategy, Strategy):
                 logging.warning(f"Item provided to Trade class is not a Strategy instance: {type(strategy)}")
                 continue
-
             for k, v in strategy.trades.items():
                 if k not in self._trades:
                     self._trades[k] = {}
                     self._trades[k]['contract'] = strategy.contracts[k]
                     if 'lmtPrice' in v:
                         self._trades[k]['lmtPrice'] = v['lmtPrice']
-
                 self._trades[k]['quantity'] = self._trades[k].get('quantity', 0) + v['quantity']
                 self._trades[k]['source'] = self._trades[k].get('source', {})
                 self._trades[k]['source'][strategy.id] = v['quantity']
-
         self._trades = {k: v for k, v in self._trades.items() if v['quantity'] != 0}
 
     async def _wait_for_order_status(self, order, target_status, timeout=15):
-        """Asynchronously waits for an order to reach a target status."""
         try:
             async for trade in self._env.ibgw.tradesAsync():
                 if trade.order.permId == order.permId and trade.orderStatus.status in target_status:
@@ -67,10 +131,6 @@ class Trade:
             return None
 
     async def place_orders_async(self, order_type=ib_insync.MarketOrder, order_params=None, order_properties=None):
-        """
-        Fully asynchronously places orders and waits for broker confirmation.
-        Assumes the ibgw connection is already established.
-        """
         order_properties = order_properties or {}
         order_params = order_params or {}
         
@@ -110,7 +170,6 @@ class Trade:
         return self._trade_log
 
     async def _log_trades_async(self, trades):
-        """Asynchronously logs trades to Firestore."""
         log_entries = {}
         for t in trades:
             log_entries[t.contract.localSymbol] = {'permId': t.order.permId, 'status': t.orderStatus.status}
