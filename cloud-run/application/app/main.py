@@ -33,7 +33,7 @@ async def lifespan(app: FastAPI):
     
     ibc_config = {'gateway': True, 'twsVersion': TWS_VERSION}
     
-    # Instantiate the global Environment and its ibgw object on first access
+    # Create and store the Environment instance in the app state.
     app.state.env = Environment(TRADING_MODE, ibc_config)
     
     try:
@@ -73,8 +73,6 @@ async def handle_intent(intent: str, request: Request):
         try:
             body = await request.json()
         except json.JSONDecodeError:
-            logging.error("Failed to decode JSON body.")
-            # Return a 400 Bad Request error
             return Response(
                 content=json.dumps({"error": "Invalid JSON body"}),
                 media_type="application/json",
@@ -87,8 +85,8 @@ async def handle_intent(intent: str, request: Request):
         if intent not in INTENTS:
             raise ValueError(f"Unknown intent received: {intent}")
         
-        intent_instance = INTENTS[intent](**body)
-        # Pass the request object to the run method if needed, for now it's unused
+        # Dependency Injection: Pass the worker-specific environment to the intent.
+        intent_instance = INTENTS[intent](env=request.app.state.env, **body)
         result = await intent_instance.run()
         status_code = 200
     except Exception as e:

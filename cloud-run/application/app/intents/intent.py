@@ -8,8 +8,8 @@ from lib.environment import Environment
 class Intent:
     _activity_log = {}
 
-    def __init__(self, **kwargs):
-        self._env = Environment() # Gets the existing, already-initialized instance
+    def __init__(self, env: Environment, **kwargs):
+        self._env = env # Dependency Injection
         hashstr = self._env.env.get('K_REVISION', 'localhost') + self.__class__.__name__ + json.dumps(kwargs, sort_keys=True)
         self._signature = md5(hashstr.encode()).hexdigest()
         self._activity_log = {
@@ -29,7 +29,7 @@ class Intent:
         if len(self._activity_log):
             try:
                 self._activity_log.update(timestamp=datetime.utcnow())
-                # .set() is a synchronous method
+                # .set() is a synchronous method, no await needed.
                 self._env.db.collection('activity').document().set(self._activity_log)
             except Exception as e:
                 self._env.logging.error(f"Failed to log activity: {e}", exc_info=True)
@@ -41,6 +41,9 @@ class Intent:
         retval = {}
         exc = None
         try:
+            if not self._env.ibgw.isConnected():
+                raise ConnectionError("Not connected to IB Gateway. Check lifespan startup logs.")
+
             if not self._env.config.get('tradingEnabled', True):
                 raise SystemExit("Trading is globally disabled by kill switch.")
             
