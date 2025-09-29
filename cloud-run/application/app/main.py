@@ -1,12 +1,10 @@
 import asyncio
+from contextlib import asynccontextmanager
 from datetime import datetime
-import falcon
-import falcon.asgi
 import json
 import logging
 from os import environ
-
-from ib_insync import util
+from fastapi import FastAPI, Request, Response
 
 from intents.allocation import Allocation
 from intents.cash_balancer import CashBalancer
@@ -18,48 +16,43 @@ from intents.trade_reconciliation import TradeReconciliation
 from intents.reconcile import Reconcile
 from lib.environment import Environment
 
-# --- 1. Lifespan Middleware (Official Falcon Pattern) ---
-class IBGatewayManager:
-    """A middleware class to manage the IB Gateway connection lifecycle."""
+# --- 1. Lifespan Manager (for FastAPI) ---
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Manages the application's startup and shutdown logic.
+    """
+    logging.info("Lifespan: Startup - Initializing application...")
+    
+    TRADING_MODE = environ.get('TRADING_MODE', 'paper')
+    TWS_VERSION = environ.get('TWS_VERSION')
+    if not TWS_VERSION:
+        raise ValueError("FATAL: TWS_VERSION environment variable is not set!")
+    
+    logging.info(f"Lifespan: Startup - Starting in {TRADING_MODE} mode for TWS version {TWS_VERSION}.")
+    
+    ibc_config = {'gateway': True, 'twsVersion': TWS_VERSION}
+    
+    # Instantiate the global Environment and its ibgw object on first access
+    app.state.env = Environment(TRADING_MODE, ibc_config)
+    
+    try:
+        logging.info("Lifespan: Startup - Connecting to IB Gateway...")
+        await app.state.env.ibgw.start_and_connect_async()
+        logging.info("Lifespan: Startup - Successfully connected to IB Gateway.")
+    except Exception as e:
+        logging.critical(f"FATAL: Lifespan connection to IB Gateway failed: {e}", exc_info=True)
+    
+    yield
+    
+    logging.info("Lifespan: Shutdown - Disconnecting from IB Gateway...")
+    if hasattr(app.state, 'env') and app.state.env.ibgw.isConnected():
+        app.state.env.ibgw.disconnect()
+    logging.info("Lifespan: Shutdown - Disconnection complete.")
 
-    async def process_startup(self, scope, event):
-        """
-        Called once per worker process when the application starts.
-        """
-        logging.info("Lifespan: Startup - Initializing application...")
-        
-        TRADING_MODE = environ.get('TRADING_MODE', 'paper')
-        TWS_VERSION = environ.get('TWS_VERSION')
-        if not TWS_VERSION:
-            raise ValueError("FATAL: TWS_VERSION environment variable is not set!")
-        
-        logging.info(f"Lifespan: Startup - Starting in {TRADING_MODE} mode for TWS version {TWS_VERSION}.")
-        
-        ibc_config = {'gateway': True, 'twsVersion': TWS_VERSION}
-        
-        # Instantiate the global Environment singleton
-        # This also lazily prepares the ibgw instance
-        self.env = Environment(TRADING_MODE, ibc_config)
-        
-        try:
-            logging.info("Lifespan: Startup - Connecting to IB Gateway...")
-            await self.env.ibgw.start_and_connect_async()
-            logging.info("Lifespan: Startup - Successfully connected to IB Gateway.")
-        except Exception as e:
-            logging.critical(f"FATAL: Lifespan connection to IB Gateway failed: {e}", exc_info=True)
-            # In a real scenario, this should cause the service to fail its health check
-
-    async def process_shutdown(self, scope, event):
-        """
-        Called once per worker process when the application shuts down.
-        """
-        logging.info("Lifespan: Shutdown - Disconnecting from IB Gateway...")
-        if hasattr(self, 'env') and self.env.ibgw.isConnected():
-            await self.env.ibgw.stop_and_terminate_async()
-        logging.info("Lifespan: Shutdown - Disconnection complete.")
-
-# --- 2. Falcon App Definition ---
+# --- 2. FastAPI App Definition ---
 logging.basicConfig(level=logging.INFO)
+app = FastAPI(lifespan=lifespan)
 
 INTENTS = {
     'allocation': Allocation,
@@ -71,39 +64,41 @@ INTENTS = {
     'reconcile': Reconcile
 }
 
-class Main:
-    async def on_get(self, request, response, intent):
-        await self._on_request(request, response, intent)
-
-    async def on_post(self, request, response, intent):
-        body = {}
-        if request.content_length:
-            body_bytes = await request.stream.read()
-            body = json.loads(body_bytes)
-        await self._on_request(request, response, intent, **body)
-
-    @staticmethod
-    async def _on_request(_, response, intent, **kwargs):
-        result = {}
+# --- 3. API Routes ---
+@app.get("/{intent}")
+@app.post("/{intent}")
+async def handle_intent(intent: str, request: Request):
+    body = {}
+    if request.method == 'POST' and request.headers.get('content-length'):
         try:
-            if intent is None or intent not in INTENTS.keys():
-                raise ValueError(f"Unknown intent received: {intent}")
-            
-            intent_instance = INTENTS[intent](**kwargs)
-            result = await intent_instance.run()
-            response.status = falcon.HTTP_200
-        except BaseException as e:
-            logging.exception("An error occurred while processing the intent:")
-            error_str = f'{e.__class__.__name__}: {e}'
-            result = {'error': error_str}
-            response.status = falcon.HTTP_500
+            body = await request.json()
+        except json.JSONDecodeError:
+            logging.error("Failed to decode JSON body.")
+            # Return a 400 Bad Request error
+            return Response(
+                content=json.dumps({"error": "Invalid JSON body"}),
+                media_type="application/json",
+                status_code=400
+            )
 
-        result['utcTimestamp'] = datetime.utcnow().isoformat()
-        response.content_type = falcon.MEDIA_JSON
-        response.text = json.dumps(result) + '\n'
+    result = {}
+    status_code = 500
+    try:
+        if intent not in INTENTS:
+            raise ValueError(f"Unknown intent received: {intent}")
+        
+        intent_instance = INTENTS[intent](**body)
+        # Pass the request object to the run method if needed, for now it's unused
+        result = await intent_instance.run()
+        status_code = 200
+    except Exception as e:
+        logging.exception("An error occurred while processing the intent:")
+        error_str = f'{e.__class__.__name__}: {e}'
+        result = {'error': error_str}
 
-# --- 3. Instantiate the App and Add Middleware ---
-app = falcon.asgi.App(middleware=[
-    IBGatewayManager()
-])
-app.add_route('/{intent}', Main())
+    result['utcTimestamp'] = datetime.utcnow().isoformat()
+    return Response(
+        content=json.dumps(result) + '\n',
+        media_type="application/json",
+        status_code=status_code
+    )

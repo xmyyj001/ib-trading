@@ -29,6 +29,7 @@ class Intent:
         if len(self._activity_log):
             try:
                 self._activity_log.update(timestamp=datetime.utcnow())
+                # .set() is a synchronous method
                 self._env.db.collection('activity').document().set(self._activity_log)
             except Exception as e:
                 self._env.logging.error(f"Failed to log activity: {e}", exc_info=True)

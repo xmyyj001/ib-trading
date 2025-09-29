@@ -1,6 +1,6 @@
 numpy<2.0
 dateparser==1.1.0
-falcon==3.0.1
+fastapi
 google-cloud-firestore==2.13.1
 google-cloud-bigquery[pandas]==3.11.0
 google-cloud-logging==3.5.0

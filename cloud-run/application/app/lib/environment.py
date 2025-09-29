@@ -1,13 +1,12 @@
 # ===================================================================
-# == FINAL CORRECTED CODE: environment.py
-# == Fixes event loop issue by instantiating IBGW on demand.
+# == FINAL VALIDATED CODE: environment.py
+# == Fixes event loop issue by instantiating IBGW on first access.
 # ===================================================================
 
 import json
 from os import environ
 from ib_insync import util
 import logging
-from google.cloud import secretmanager
 
 from lib.gcp import GcpModule
 from lib.ibgw import IBGW
@@ -16,7 +15,6 @@ class Environment:
     """Singleton class to manage the application environment."""
 
     class __Implementation(GcpModule):
-        ACCOUNT_VALUE_TIMEOUT = 60
         ENV_VARS = ['K_REVISION', 'PROJECT_ID']
 
         def __init__(self, trading_mode, ibc_config):
@@ -25,8 +23,6 @@ class Environment:
             self._env = {k: v for k, v in environ.items() if k in self.ENV_VARS}
             self._trading_mode = trading_mode
             
-            self._logging.info("IB Gateway authentication is handled by the startup script.")
-
             self._ibc_config = {**ibc_config, 'tradingMode': self._trading_mode}
             self._ibc_config['ibcPath'] = environ.get('IBC_PATH')
             self._ibc_config['twsPath'] = environ.get('TWS_PATH')
@@ -56,7 +52,7 @@ class Environment:
         @property
         def ibgw(self):
             if self.__ibgw is None:
-                self._logging.info("Instantiating IBGW on first access...")
+                self._logging.info("Instantiating IBGW on first access within the event loop...")
                 ib_connect_config = {'port': self._config.get('apiPort', 4002)}
                 self.__ibgw = IBGW(self._ibc_config, ib_config=ib_connect_config)
             return self.__ibgw
