@@ -28,9 +28,6 @@ class IBGatewayManager:
         """
         logging.info("Lifespan: Startup - Initializing application...")
         
-        logging.info("Lifespan: Startup - Applying asyncio patch for ib_insync...")
-        util.patchAsyncio()
-
         TRADING_MODE = environ.get('TRADING_MODE', 'paper')
         TWS_VERSION = environ.get('TWS_VERSION')
         if not TWS_VERSION:
