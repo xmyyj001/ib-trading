@@ -23,35 +23,27 @@ class Intent:
 
     async def _core(self):
         """Placeholder for core logic in subclasses."""
-        # Now assumes connection is ready.
         return {'currentTime': (await self._env.ibgw.reqCurrentTimeAsync()).isoformat()}
 
-    async def _log_activity_async(self):
+    def _log_activity(self):
         if len(self._activity_log):
             try:
                 self._activity_log.update(timestamp=datetime.utcnow())
-                # Firestore client in gcp.py should be async, assuming it is:
-                await self._env.db.collection('activity').document().set(self._activity_log)
+                self._env.db.collection('activity').document().set(self._activity_log)
             except Exception as e:
                 self._env.logging.error(f"Failed to log activity: {e}", exc_info=True)
-                self._env.logging.info(self._activity_log)
 
     async def run(self):
         """
         Executes the intent's logic, assuming a persistent connection.
-        Connection management is now handled by the ASGI lifespan.
         """
         retval = {}
         exc = None
         try:
-            # Kill switch is the first check
             if not self._env.config.get('tradingEnabled', True):
                 raise SystemExit("Trading is globally disabled by kill switch.")
             
-            # Set market data type for this session
             self._env.ibgw.reqMarketDataType(self._env.config['marketDataType'])
-            
-            # Directly execute the core logic
             retval = await self._core()
 
         except BaseException as e:
@@ -61,10 +53,10 @@ class Intent:
             exc = e
         finally:
             if self._env.env.get('K_REVISION', 'localhost') != 'localhost':
-                await self._log_activity_async()
+                self._log_activity()
         
         if exc is not None:
-            raise exc # Re-raise the exception to be caught by main.py for 500 response
+            raise exc
 
         logging.info(f"Intent {self.__class__.__name__} completed successfully.")
         if 'timestamp' in self._activity_log and isinstance(self._activity_log['timestamp'], datetime):
