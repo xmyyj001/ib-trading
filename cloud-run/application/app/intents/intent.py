@@ -3,13 +3,16 @@ from datetime import datetime
 from hashlib import md5
 import logging
 
-from lib.environment import Environment
+# Use a conditional import for type hinting to avoid circular dependencies
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from lib.environment import Environment
 
 class Intent:
     _activity_log = {}
 
-    def __init__(self, env: Environment, **kwargs):
-        self._env = env # Dependency Injection
+    def __init__(self, env: "Environment", **kwargs):
+        self._env = env  # Dependency Injection
         hashstr = self._env.env.get('K_REVISION', 'localhost') + self.__class__.__name__ + json.dumps(kwargs, sort_keys=True)
         self._signature = md5(hashstr.encode()).hexdigest()
         self._activity_log = {

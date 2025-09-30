@@ -1,18 +1,21 @@
 # ===================================================================
 # == FINAL VALIDATED CODE: environment.py
-# == Fixes event loop issue by instantiating IBGW on first access.
+# == Fixes event loop issue by instantiating IBGW directly in __init__.
 # ===================================================================
 
-import json
+import logging
 from os import environ
 from ib_insync import util
-import logging
 
 from lib.gcp import GcpModule
 from lib.ibgw import IBGW
 
 class Environment:
-    """Singleton class to manage the application environment."""
+    """
+    Singleton class to manage the application environment.
+    This version uses an eager-loading approach for IBGW to ensure
+    it is instantiated on the correct asyncio event loop during startup.
+    """
 
     class __Implementation(GcpModule):
         ENV_VARS = ['K_REVISION', 'PROJECT_ID']
@@ -38,7 +41,11 @@ class Environment:
             self._config = {**common_doc.to_dict(), **mode_doc.to_dict()}
             self._logging.info("Successfully loaded configuration from Firestore.")
 
-            self.__ibgw = None
+            # --- Eagerly instantiate the IBGW instance in the constructor ---
+            self._logging.info("Eagerly instantiating IBGW in the constructor...")
+            ib_connect_config = {'port': self._config.get('apiPort', 4002)}
+            self._ibgw = IBGW(self._ibc_config, ib_config=ib_connect_config)
+            
             util.logToConsole(logging.ERROR)
 
         @property
@@ -51,11 +58,8 @@ class Environment:
 
         @property
         def ibgw(self):
-            if self.__ibgw is None:
-                self._logging.info("Instantiating IBGW on first access within the event loop...")
-                ib_connect_config = {'port': self._config.get('apiPort', 4002)}
-                self.__ibgw = IBGW(self._ibc_config, ib_config=ib_connect_config)
-            return self.__ibgw
+            # This is now a simple getter
+            return self._ibgw
 
         @property
         def logging(self):
@@ -65,7 +69,7 @@ class Environment:
         def trading_mode(self):
             return self._trading_mode
 
-    # --- Singleton Wrapper ---
+    # --- Singleton Wrapper (unchanged) ---
     __instance = None
     def __init__(self, trading_mode='paper', ibc_config=None):
         if Environment.__instance is None:
