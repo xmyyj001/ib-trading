@@ -8,8 +8,10 @@ from lib.environment import Environment
 class Intent:
     _activity_log = {}
 
-    def __init__(self, env: Environment, **kwargs):
-        self._env = env # Dependency Injection
+    def __init__(self, env: Environment = None, **kwargs):
+        # The core fix: Use the injected environment if provided, otherwise create one.
+        self._env = env or Environment()
+        
         hashstr = self._env.env.get('K_REVISION', 'localhost') + self.__class__.__name__ + json.dumps(kwargs, sort_keys=True)
         self._signature = md5(hashstr.encode()).hexdigest()
         self._activity_log = {
