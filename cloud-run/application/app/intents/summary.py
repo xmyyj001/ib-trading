@@ -1,9 +1,10 @@
 from intents.intent import Intent
+import asyncio
 
 class Summary(Intent):
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, env, **kwargs):
+        super().__init__(env=env, **kwargs)
         self._activity_log = {}  # don't log summary requests
 
     async def _core(self):
@@ -63,18 +64,3 @@ class Summary(Intent):
                 'goodTillDate': trade.order.goodTillDate
             }] for trade in trades
         }
-
-
-if __name__ == '__main__':
-    from lib.environment import Environment
-
-    env = Environment()
-    env.ibgw.connect(port=4001)
-    try:
-        summary = Summary()
-        print(summary._core())
-        print(summary._activity_log)
-    except Exception as e:
-        raise e
-    finally:
-        env.ibgw.disconnect()
