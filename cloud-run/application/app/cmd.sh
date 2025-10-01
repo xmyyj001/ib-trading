@@ -13,5 +13,5 @@ echo ">>> Starting IB Gateway..."
 echo ">>> Waiting for IB Gateway to initialize (90 seconds)..."
 sleep 90
 
-echo ">>> Starting application via custom launcher..."
-exec python launcher.py
+echo ">>> Starting Gunicorn web server..."
+exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 0 -k uvicorn.workers.UvicornWorker main:app
