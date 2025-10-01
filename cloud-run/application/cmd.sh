@@ -19,5 +19,5 @@ echo ">>> Starting IB Gateway in the background..."
 echo ">>> Waiting for IB Gateway to initialize (90 seconds)..."
 sleep 90
 
-echo ">>> Starting Gunicorn web server in the foreground..."
-exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 0 -k uvicorn.workers.UvicornWorker main:app
+echo ">>> Starting Uvicorn server directly..."
+exec uvicorn main:app --host 0.0.0.0 --port $PORT
