@@ -7,6 +7,8 @@ if TYPE_CHECKING:
     from lib.environment import Environment
 
 class Intent:
+    _activity_log = {}
+
     def __init__(self, env: "Environment", **kwargs):
         self._env = env
         hashstr = self._env.env.get('K_REVISION', 'localhost') + self.__class__.__name__ + json.dumps(kwargs, sort_keys=True)
@@ -21,6 +23,7 @@ class Intent:
         }
 
     async def _core(self):
+        """Placeholder for core logic in subclasses."""
         return {'currentTime': (await self._env.ibgw.reqCurrentTimeAsync()).isoformat()}
 
     def _log_activity(self):
@@ -35,19 +38,27 @@ class Intent:
         retval = {}
         exc = None
         try:
-            if not self._env.ibgw.isConnected():
-                raise ConnectionError("Not connected. Check lifespan logs.")
+            # Connect-on-demand: connect at the beginning of the request.
+            await self._env.ibgw.start_and_connect_async()
+
             if not self._env.config.get('tradingEnabled', True):
                 raise SystemExit("Trading disabled by kill switch.")
+            
             self._env.ibgw.reqMarketDataType(self._env.config['marketDataType'])
             retval = await self._core()
+
         except BaseException as e:
             error_str = f'{e.__class__.__name__}: {e}'
             self._activity_log.update(exception=error_str)
             exc = e
         finally:
+            # Always disconnect at the end of the request.
+            if self._env.ibgw.isConnected():
+                self._env.ibgw.disconnect()
             if self._env.env.get('K_REVISION', 'localhost') != 'localhost':
                 self._log_activity()
+        
         if exc:
             raise exc
+
         return retval or self._activity_log
