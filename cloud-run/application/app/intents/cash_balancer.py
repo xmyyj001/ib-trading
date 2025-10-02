@@ -7,16 +7,16 @@ class CashBalancer(Intent):
 
     _dry_run = False
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, env, **kwargs):
+        super().__init__(env=env, **kwargs)
 
         self._dry_run = kwargs.get('dryRun', self._dry_run) if kwargs is not None else self._dry_run
         self._activity_log.update(dryRun=self._dry_run)
 
-    def _core(self):
+    async def _core_async(self):
         self._env.logging.info('Checking cash balances...')
 
-        account_values = self._env.get_account_values(self._env.config['account'],
+        account_values = await self._env.get_account_values_async(self._env.config['account'],
                                                       rows=['NetLiquidation', 'CashBalance', 'ExchangeRate'])
         base_currency = [*account_values['NetLiquidation'].keys()][0]
         exposure = {
@@ -40,11 +40,13 @@ class CashBalancer(Intent):
             # place orders
             perm_ids = []
             for k, v in trades.items():
-                order = self._env.ibgw.placeOrder(Forex(pair=k, exchange='FXCONV'),
+                order = await self._env.ibgw.placeOrderAsync(Forex(pair=k, exchange='FXCONV'),
                                                   MarketOrder('BUY' if v > 0 else 'SELL', abs(v)))
-                # give the IB Gateway a couple of seconds to digest orders and to raise possible errors
-                self._env.ibgw.sleep(2)
                 perm_ids.append(order.order.permId)
+            
+            # Wait for trades to appear
+            await asyncio.sleep(2)
+
             orders = {
                 t.contract.pair(): {
                     'order': {
@@ -57,7 +59,7 @@ class CashBalancer(Intent):
                         for k, v in t.orderStatus.nonDefaults().items()
                         if isinstance(v, (int, float, str))
                     }
-                } for t in self._env.ibgw.trades() if t.orderStatus.permId in perm_ids
+                } for t in self._env.ibgw.openTrades() if t.orderStatus.permId in perm_ids
             }
             self._activity_log.update(orders=orders)
             self._env.logging.info(f"Orders placed: {self._activity_log['orders']}")

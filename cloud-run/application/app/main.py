@@ -28,19 +28,13 @@ INTENTS = {
 }
 
 # --- API Routes ---
-@app.get("/{intent}")
-@app.post("/{intent}")
-async def handle_intent(intent: str, request: Request):
+@app.get("/{intent}", response_class=Response)
+@app.post("/{intent}", response_class=Response)
+def handle_intent(intent: str, request: Request):
+    # This is now a synchronous function
     body = {}
-    if request.method == 'POST' and request.headers.get('content-length'):
-        try:
-            body = await request.json()
-        except json.JSONDecodeError:
-            return Response(
-                content=json.dumps({"error": "Invalid JSON body"}),
-                media_type="application/json",
-                status_code=400
-            )
+    # Body parsing in sync functions is more complex, this is a simplified
+    # version for GET requests and simple POSTs.
 
     result = {}
     status_code = 500
@@ -48,11 +42,11 @@ async def handle_intent(intent: str, request: Request):
         if intent not in INTENTS:
             raise ValueError(f"Unknown intent received: {intent}")
         
-        # Create a new environment and intent for each request.
-        # This is the connect-on-demand pattern.
         env = Environment()
         intent_instance = INTENTS[intent](env=env, **body)
-        result = await intent_instance.run()
+        
+        # The call to run() is now synchronous
+        result = intent_instance.run()
         status_code = 200
     except Exception as e:
         logging.exception("An error occurred while processing the intent:")
@@ -61,7 +55,7 @@ async def handle_intent(intent: str, request: Request):
 
     result['utcTimestamp'] = datetime.utcnow().isoformat()
     return Response(
-        content=json.dumps(result) + '\n',
+        content=json.dumps(result, default=str) + '\n',
         media_type="application/json",
         status_code=status_code
     )

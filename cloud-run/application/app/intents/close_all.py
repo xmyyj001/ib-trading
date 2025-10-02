@@ -10,19 +10,19 @@ class CloseAll(Intent):
     _dry_run = False
     _order_properties = {}
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, env, **kwargs):
+        super().__init__(env=env, **kwargs)
 
         self._dry_run = kwargs.get('dryRun', self._dry_run) if kwargs is not None else self._dry_run
         self._order_properties = kwargs.get('orderProperties', self._order_properties) if kwargs is not None else self._order_properties
         self._activity_log.update(dryRun=self._dry_run, orderProperties=self._order_properties)
 
-    def _core(self):
+    async def _core_async(self):
         self._env.logging.info('Cancelling open orders...')
         if not self._dry_run:
-            for o in self._env.ibgw.orders():
-                self._env.ibgw.cancelOrder(o)
-                self._env.db.document(f'positions/{self._env.trading_mode}/openOrders/{o.permId}').delete()
+            for o in self._env.ibgw.openOrders():
+                await self._env.ibgw.cancelOrderAsync(o)
+                await self._env.db.collection(f'positions/{self._env.trading_mode}/openOrders/{o.permId}').delete()
                 self._env.logging.info(f'Cancelled {o.permId}, deleted /positions/{self._env.trading_mode}/openOrders/{o.permId}')
 
         self._env.logging.info('Closing all positions...')
@@ -46,15 +46,7 @@ class CloseAll(Intent):
             self._env.logging.warning(f"Consolidated trade and IB portfolio don't match - portfolio: {portfolio}")
 
         if not self._dry_run:
-            # place orders
-            # order_params = {
-            #     k: {
-            #         'lmtPrice': round(market_prices[k] * (1 + (1 if v['quantity'] > 0 else -1) * self._config['limitPriceDistance'])
-            #                           / min_ticks[k]) * min_ticks[k]
-            #     }
-            #     for k, v in trades.trades.items()
-            # }
-            self._activity_log.update(orders=trades.place_orders(MarketOrder,
+            self._activity_log.update(orders=await trades.place_orders_async(MarketOrder,
                                                                  order_properties=self._order_properties))
             self._env.logging.info(f"Orders placed: {self._activity_log['orders']}")
 
