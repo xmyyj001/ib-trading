@@ -1,6 +1,5 @@
 from datetime import datetime
 import json
-import logging
 from fastapi import FastAPI, Request, Response
 
 from intents.allocation import Allocation
@@ -14,7 +13,6 @@ from intents.reconcile import Reconcile
 from lib.environment import Environment
 
 # --- FastAPI App Definition (No Lifespan) ---
-logging.basicConfig(level=logging.INFO)
 app = FastAPI()
 
 INTENTS = {
@@ -38,18 +36,21 @@ def handle_intent(intent: str, request: Request):
 
     result = {}
     status_code = 500
+    
+    # Get the environment instance once.
+    env = Environment()
     try:
         if intent not in INTENTS:
             raise ValueError(f"Unknown intent received: {intent}")
         
-        env = Environment()
         intent_instance = INTENTS[intent](env=env, **body)
         
         # The call to run() is now synchronous
         result = intent_instance.run()
         status_code = 200
     except Exception as e:
-        logging.exception("An error occurred while processing the intent:")
+        # Use the logger from the environment object for consistent, structured logging.
+        env.logging.exception("An error occurred while processing the intent:")
         error_str = f'{e.__class__.__name__}: {e}'
         result = {'error': error_str}
 

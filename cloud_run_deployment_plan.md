@@ -182,7 +182,51 @@ gcloud run services add-iam-policy-binding ${CLOUD_RUN_SERVICE_NAME} \
     --region="${GCP_REGION}"
 ```
 
-### 附录：生产场景的 Cloud Scheduler 配置
+### 附录 A: 高级测试：其他意图
+
+#### `close-all`
+
+*   **目的**: 平掉所有指定策略的持仓。
+*   **方法**: `POST`
+*   **命令**:
+    ```bash
+    # 模拟计算平掉 spymacdvixy 策略持仓所需的交易
+    curl -X POST -H "Content-Type: application/json" -H "Authorization: Bearer ${TOKEN}" \
+      -d '{"dryRun": true, "strategies": ["spymacdvixy"]}' \
+      "${SERVICE_URL}/close-all"
+    ```
+
+#### `reconcile`
+
+*   **目的**: 手动将系统内部存储的持仓与券商的真实持仓同步。
+*   **方法**: `GET`
+*   **命令**:
+    ```bash
+    curl -H "Authorization: Bearer ${TOKEN}" "${SERVICE_URL}/reconcile"
+    ```
+
+#### `trade-reconciliation`
+
+*   **目的**: 检查近期的成交（Fills），并更新系统内部的挂单和持仓状态。
+*   **方法**: `GET`
+*   **命令**:
+    ```bash
+    curl -H "Authorization: Bearer ${TOKEN}" "${SERVICE_URL}/trade-reconciliation"
+    ```
+
+#### `cash-balancer`
+
+*   **目的**: 将非基础货币的现金余额换回基础货币。
+*   **方法**: `POST`
+*   **命令**:
+    ```bash
+    # 模拟计算所需的现金转换交易
+    curl -X POST -H "Content-Type: application/json" -H "Authorization: Bearer ${TOKEN}" \
+      -d '{"dryRun": true}' \
+      "${SERVICE_URL}/cash-balancer"
+    ```
+
+### 附录 B: 生产场景的 Cloud Scheduler 配置
 
 *   **目的**: 创建云端的定时任务（Cron Job），以实现交易场景的完全自动化，无需人工触发。
 
