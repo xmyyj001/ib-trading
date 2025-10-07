@@ -6,8 +6,9 @@ class Reconcile(Intent):
         ib_positions = self._env.ibgw.positions()
         broker_portfolio = {str(p.contract.conId): p.position for p in ib_positions}
         holdings_ref = self._env.db.collection(f'positions/{self._env.trading_mode}/holdings')
-        for doc in list(await holdings_ref.stream()):
-            await doc.reference.delete()
+            strategy_docs = [doc async for doc in holdings_ref.stream()]
+            
+            # 3. Clear all existing strategy holdings
         if broker_portfolio:
             recon_doc_ref = holdings_ref.document('reconciled_holdings')
             await recon_doc_ref.set(broker_portfolio)

@@ -1,65 +1,43 @@
+import asyncio
 from ib_insync import MarketOrder
-
 from intents.intent import Intent
-from lib.trading import Trade
-from strategies.strategy import Strategy
-
 
 class CloseAll(Intent):
-
-    _dry_run = False
-    _order_properties = {}
-
-    def __init__(self, env, **kwargs):
-        super().__init__(env=env, **kwargs)
-
-        self._dry_run = kwargs.get('dryRun', self._dry_run) if kwargs is not None else self._dry_run
-        self._order_properties = kwargs.get('orderProperties', self._order_properties) if kwargs is not None else self._order_properties
-        self._activity_log.update(dryRun=self._dry_run, orderProperties=self._order_properties)
+    """Closes all open positions and cancels all open orders."""
 
     async def _core_async(self):
-        self._env.logging.info('Cancelling open orders...')
-        if not self._dry_run:
-            for o in self._env.ibgw.openOrders():
-                await self._env.ibgw.cancelOrderAsync(o)
-                await self._env.db.collection(f'positions/{self._env.trading_mode}/openOrders/{o.permId}').delete()
-                self._env.logging.info(f'Cancelled {o.permId}, deleted /positions/{self._env.trading_mode}/openOrders/{o.permId}')
+        # 1. Cancel all open orders first to prevent new trades
+        self._env.logging.warning("Cancelling all open orders...")
+        open_orders = await self._env.ibgw.reqOpenOrdersAsync()
+        for order in open_orders:
+            await self._env.ibgw.cancelOrderAsync(order)
+        await asyncio.sleep(2) # Give IB a moment to process cancellations
 
-        self._env.logging.info('Closing all positions...')
-        strategies = [Strategy(doc.id)
-                      for doc in self._env.db.collection(f'positions/{self._env.trading_mode}/holdings').get()]
-        self._activity_log.update(**{
-            'holdings': {s.id: {s.contracts[k].local_symbol: v for k, v in s.holdings.items()} for s in strategies},
-            'contractIds': {v.contract.localSymbol: k for s in strategies for k, v in s.contracts.items()},
-            'trades': {s.id: {s.contracts[k].local_symbol: v for k, v in s.trades.items()} for s in strategies}
-        })
-        self._env.logging.info(f"Trades: {self._activity_log['trades']}")
+        # 2. Get all current positions from the broker (the ground truth)
+        self._env.logging.warning("Closing all positions...")
+        positions = await self._env.ibgw.reqPositionsAsync()
+        if not positions:
+            self._env.logging.info("No positions to close.")
+            return {"status": "No positions to close."}
 
-        trades = Trade(strategies)
-        trades.consolidate_trades()
-        self._activity_log.update(consolidatedTrades={v['contract'].local_symbol: v['quantity']
-                                                      for v in trades.trades.values()})
-        self._env.logging.info(f"Consolidated trades: {self._activity_log['consolidatedTrades']}")
-        # double-check w/ IB potfolio
-        portfolio = {item.contract.conId: item.position for item in self._env.ibgw.portfolio()}
-        if {k: -v for k, v in portfolio.items()} != {k: v['quantity'] for k, v in trades.trades.items()}:
-            self._env.logging.warning(f"Consolidated trade and IB portfolio don't match - portfolio: {portfolio}")
+        closing_orders = []
+        for p in positions:
+            # Create an opposite order to close the position
+            if p.position == 0:
+                continue
+            
+            action = 'SELL' if p.position > 0 else 'BUY'
+            quantity = abs(p.position)
+            
+            order = MarketOrder(action, quantity)
+            trade = self._env.ibgw.placeOrder(p.contract, order)
+            closing_orders.append({
+                'symbol': p.contract.localSymbol,
+                'action': action,
+                'quantity': quantity,
+                'orderId': trade.order.orderId
+            })
+            self._env.logging.info(f"Placed closing order for {quantity} of {p.contract.localSymbol}")
 
-        if not self._dry_run:
-            self._activity_log.update(orders=await trades.place_orders_async(MarketOrder,
-                                                                 order_properties=self._order_properties))
-            self._env.logging.info(f"Orders placed: {self._activity_log['orders']}")
-
-
-if __name__ == '__main__':
-    from lib.environment import Environment
-
-    env = Environment()
-    env.ibgw.connect(port=4001)
-    try:
-        close_all = CloseAll(dryRun=True)
-        close_all._core()
-    except Exception as e:
-        raise e
-    finally:
-        env.ibgw.disconnect()
+        self._activity_log.update(closing_orders=closing_orders)
+        return {"status": "Close-all process initiated.", "closing_orders": closing_orders}
