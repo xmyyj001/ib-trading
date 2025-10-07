@@ -2,7 +2,7 @@ import pandas as pd
 from ib_insync import util
 from strategies.strategy import Strategy
 
-class SpyMacdVixy(Strategy):
+class TestSignalGenerator(Strategy):
     """
     A trading strategy based on the MACD indicator for SPY, with a hedge using VIXY.
     - When MACD is above the signal line (bullish), go long SPY.

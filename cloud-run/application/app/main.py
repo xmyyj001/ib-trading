@@ -1,6 +1,7 @@
 from datetime import datetime
 import json
 from fastapi import FastAPI, Request, Response
+import asyncio
 
 from intents.allocation import Allocation
 from intents.cash_balancer import CashBalancer
@@ -12,7 +13,6 @@ from intents.trade_reconciliation import TradeReconciliation
 from intents.reconcile import Reconcile
 from lib.environment import Environment
 
-# --- FastAPI App Definition (No Lifespan) ---
 app = FastAPI()
 
 INTENTS = {
@@ -25,19 +25,39 @@ INTENTS = {
     'reconcile': Reconcile
 }
 
-# --- API Routes ---
-@app.get("/{intent}", response_class=Response)
+# This function will run in a separate thread, not in the main event loop
+def get_body_sync(request: Request):
+    # Starlette's Request object provides a sync way to get the body
+    return request.scope.get('_body')
+
+async def set_body(request: Request):
+    # We need to run this once to populate the scope with the body
+    request.scope['_body'] = await request.body()
+
 @app.post("/{intent}", response_class=Response)
-def handle_intent(intent: str, request: Request):
-    # This is now a synchronous function
+def handle_post_intent(intent: str, request: Request):
+    # Run the async part to get the body
+    asyncio.run(set_body(request))
+    # Now handle the logic synchronously
+    return handle_intent_logic(intent, request, is_post=True)
+
+@app.get("/{intent}", response_class=Response)
+def handle_get_intent(intent: str, request: Request):
+    return handle_intent_logic(intent, request, is_post=False)
+
+def handle_intent_logic(intent: str, request: Request, is_post: bool):
     body = {}
-    # Body parsing in sync functions is more complex, this is a simplified
-    # version for GET requests and simple POSTs.
+    if is_post:
+        try:
+            raw_body = get_body_sync(request)
+            if raw_body:
+                body = json.loads(raw_body)
+        except Exception:
+            pass
 
     result = {}
     status_code = 500
     
-    # Get the environment instance once.
     env = Environment()
     try:
         if intent not in INTENTS:
@@ -45,11 +65,9 @@ def handle_intent(intent: str, request: Request):
         
         intent_instance = INTENTS[intent](env=env, **body)
         
-        # The call to run() is now synchronous
         result = intent_instance.run()
         status_code = 200
     except Exception as e:
-        # Use the logger from the environment object for consistent, structured logging.
         env.logging.exception("An error occurred while processing the intent:")
         error_str = f'{e.__class__.__name__}: {e}'
         result = {'error': error_str}
