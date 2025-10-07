@@ -11,7 +11,10 @@ class CloseAll(Intent):
         open_orders = await self._env.ibgw.reqOpenOrdersAsync()
         for order in open_orders:
             await self._env.ibgw.cancelOrderAsync(order)
-        await asyncio.sleep(2) # Give IB a moment to process cancellations
+        
+        # Give IB a moment to process cancellations if there were any
+        if open_orders:
+            await asyncio.sleep(2)
 
         # 2. Get all current positions from the broker (the ground truth)
         self._env.logging.warning("Closing all positions...")
@@ -30,7 +33,10 @@ class CloseAll(Intent):
             quantity = abs(p.position)
             
             order = MarketOrder(action, quantity)
-            trade = self._env.ibgw.placeOrder(p.contract, order)
+            
+            # Use the correct ASYNC version of the placeOrder function
+            trade = await self._env.ibgw.placeOrderAsync(p.contract, order)
+            
             closing_orders.append({
                 'symbol': p.contract.localSymbol,
                 'action': action,
