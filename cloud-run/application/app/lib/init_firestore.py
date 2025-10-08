@@ -22,7 +22,10 @@ config_data = {
         "exposure": {
             "overall": 0.9,
             "strategies": {
-                "spymacdvixy": 1.0,
+            'spymacdvixy': 1.0,
+            'testsignalgenerator': 1.0
+        },
+        'overall': 0.9
                 "dummy": 1.0
             }
         }

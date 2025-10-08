@@ -5,7 +5,8 @@ from strategies.strategy import Strategy
 class TestSignalGenerator(Strategy):
     """
     A trading strategy based on the MACD indicator for SPY, with a hedge using VIXY.
-    This version is modified to use MOCKED data to guarantee a signal for testing.
+    - When MACD is above the signal line (bullish), go long SPY.
+    - When MACD is below the signal line (bearish), go short SPY.
     """
 
     def _setup(self):
@@ -25,36 +26,25 @@ class TestSignalGenerator(Strategy):
         """
         self._env.logging.info("Generating signals for SpyMacdVixy...")
         
-        # --- START: MOCK DATA FOR TESTING ---
-        self._env.logging.warning("USING MOCKED DATA FOR SIGNAL GENERATION TEST!")
-        mock_data = {
-            'date': pd.to_datetime(['2025-10-01', '2025-10-02', '2025-10-03', '2025-10-04', '2025-10-05', '2025-10-06']),
-            'open': [400, 402, 401, 403, 400, 405],
-            'high': [403, 404, 403, 405, 405, 408],
-            'low': [399, 401, 400, 402, 399, 404],
-            'close': [402.0, 401.0, 402.5, 401.5, 406.0, 407.0], # A cross-up happens here
-            'volume': [1000, 1100, 1050, 1200, 1300, 1400],
-            'average': [401.5, 402.5, 401.5, 403.5, 402.5, 406.0],
-            'barCount': [100, 100, 100, 100, 100, 100]
-        }
-        df = pd.DataFrame(mock_data)
-        df.set_index('date', inplace=True)
-        # The original `reqHistoricalData` returns a list of bars, so we mimic that.
-        # In this case, the dataframe itself is treated as the content.
-        bars = [df] 
-        # --- END: MOCK DATA FOR TESTING ---
+        # 1. Fetch historical data for SPY
+        self._env.logging.info("Fetching historical data for SPY...")
+        bars = self._env.ibgw.reqHistoricalData(
+            self.spy.contract,
+            endDateTime='',
+            durationStr='5 D',
+            barSizeSetting='30 mins',
+            whatToShow='TRADES',
+            useRTH=True
+        )
 
         if not bars:
-            self._env.logging.error("Mock data is missing. Aborting.")
+            self._env.logging.error("Could not fetch historical data for SPY. Aborting.")
             self._signals = { k: (0, 0) for k in self._holdings.keys() }
             return
 
-        # The original code uses util.df(bars), which expects a list of BarData objects.
-        # Since we created a DataFrame directly, we can just use it.
-        # df = util.df(bars) # This line is no longer needed with our mock data structure
-
+        df = util.df(bars)
         if df.empty:
-            self._env.logging.error("Mock DataFrame is empty. Aborting.")
+            self._env.logging.error("Historical data for SPY is empty. Aborting.")
             self._signals = { k: (0, 0) for k in self._holdings.keys() }
             return
             
