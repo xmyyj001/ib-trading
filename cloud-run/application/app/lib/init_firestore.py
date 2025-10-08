@@ -7,10 +7,11 @@ if len(sys.argv) < 2:
     sys.exit(1)
 
 project_id = sys.argv[1]
-print(f"正在为项目 '{project_id}' 初始化 Firestore 配置 (场景A: 波段交易)...")
+print(f"正在为项目 '{project_id}' 初始化 Firestore 配置...")
 
 db = firestore.Client(project=project_id)
 
+# Correctly formatted configuration data
 config_data = {
     "common": {
         "tradingEnabled": False,
@@ -22,10 +23,8 @@ config_data = {
         "exposure": {
             "overall": 0.9,
             "strategies": {
-            'spymacdvixy': 1.0,
-            'testsignalgenerator': 1.0
-        },
-        'overall': 0.9
+                "spymacdvixy": 1.0,
+                "testsignalgenerator": 1.0, # Correctly added here
                 "dummy": 1.0
             }
         }
