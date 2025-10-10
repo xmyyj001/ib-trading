@@ -1,41 +1,52 @@
-import logging
+import asyncio
 from os import environ
-from ib_insync import util
-
 from lib.gcp import GcpModule
 from lib.ibgw import IBGW
 
-class Environment(GcpModule):
-    """Manages the application environment for a single request."""
-    
-    def __init__(self, trading_mode='paper', ibc_config=None):
+class _EnvironmentImpl(GcpModule):
+    def __init__(self, trading_mode, ibc_config=None):
         super().__init__()
-        self._env = {k: v for k, v in environ.items() if k in ['K_REVISION', 'PROJECT_ID']}
-        self._trading_mode = trading_mode
+        self.trading_mode = trading_mode
+        self.config = {}
         
-        ibc_config = ibc_config or {'gateway': True, 'twsVersion': environ.get('TWS_VERSION')}
-        self._ibc_config = {**ibc_config, 'tradingMode': self._trading_mode}
-        
-        self._logging.info("Fetching configuration from Firestore...")
+        # --- FINAL FIX: Re-add the self.env attribute --- 
+        self.env = {k: v for k, v in environ.items() if k in ['K_REVISION', 'PROJECT_ID']}
+        # --- END FINAL FIX ---
+
         common_doc = self.db.document('config/common').get()
-        mode_doc = self.db.document(f'config/{self._trading_mode}').get()
-        if not common_doc.exists or not mode_doc.exists:
-            raise ValueError("Critical configuration documents not found in Firestore.")
-        self._config = {**common_doc.to_dict(), **mode_doc.to_dict()}
-        self._logging.info("Successfully loaded configuration.")
+        if common_doc.exists:
+            self.config.update(common_doc.to_dict())
+        
+        mode_doc = self.db.document(f'config/{self.trading_mode}').get()
+        if mode_doc.exists:
+            self.config.update(mode_doc.to_dict())
+        
+        self.ibgw = IBGW(ibc_config)
 
-        self._logging.info("Eagerly instantiating IBGW for this request...")
-        ib_connect_config = {'port': self._config.get('apiPort', 4002)}
-        self._ibgw = IBGW(self._ibc_config, ib_config=ib_connect_config)
-        util.logToConsole(logging.ERROR)
+    async def get_account_values_async(self, account):
+        """Asynchronously fetches account values."""
+        summary = await self.ibgw.accountSummaryAsync(account)
+        return {
+            v.tag: {v.currency: v.value}
+            for v in summary if v.tag in ['NetLiquidation', 'TotalCashValue']
+        }
 
-    @property
-    def config(self): return self._config
-    @property
-    def env(self): return self._env
-    @property
-    def ibgw(self): return self._ibgw
-    @property
-    def logging(self): return self._logging
-    @property
-    def trading_mode(self): return self._trading_mode
+class Environment:
+    _instance = None
+    def __new__(cls, trading_mode=None, ibc_config=None):
+        if cls._instance is None:
+            trading_mode = trading_mode or environ.get('TRADING_MODE', 'paper')
+            
+            if ibc_config is None:
+                ibc_config = {
+                    'gateway': True,
+                    'twsVersion': environ.get('TWS_VERSION', 1019),
+                    'ibcIni': environ.get('IBC_INI', '/opt/ibc/config.ini'),
+                    'ibcPath': environ.get('IBC_PATH', '/opt/ibc'),
+                    'javaPath': environ.get('JAVA_PATH', '/usr/bin/java'),
+                    'twsPath': environ.get('TWS_PATH', '/root/Jts'),
+                    'twsSettingsPath': environ.get('TWS_SETTINGS_PATH', '/root/Jts')
+                }
+
+            cls._instance = _EnvironmentImpl(trading_mode, ibc_config)
+        return cls._instance
