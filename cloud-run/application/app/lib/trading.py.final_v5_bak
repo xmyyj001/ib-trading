@@ -1,27 +1,14 @@
-# /home/app/lib/trading.py
-
 from ib_insync import Contract, Stock, Forex, Future, Option, Order, TagValue
 from lib.environment import Environment
 import asyncio
 
 class Instrument:
-    """
-    A wrapper for ib_insync contract objects.
-    This class should not be instantiated directly. Use subclasses like Stock, Forex.
-    """
-    IB_CLS = None  # Subclasses must override this
-
-    def __init__(self, env: Environment, ib_contract: Contract = None, **kwargs):
-        if self.IB_CLS is None and not ib_contract:
-            raise TypeError("Cannot instantiate the base Instrument class directly. Use a subclass like Stock or Forex.")
-        
-        self._env = env  # <-- Dependency Injection
-        
+    IB_CLS = Contract
+    def __init__(self, ib_contract=None, **kwargs):
+        self._env = Environment()
         if ib_contract and isinstance(ib_contract, Contract):
             self.contract = ib_contract
         elif kwargs:
-            if self.IB_CLS is None:
-                 raise TypeError(f"IB_CLS is not defined for class {self.__class__.__name__}")
             self.contract = self.IB_CLS(**kwargs)
         else:
             raise ValueError("Instrument must be initialized with a contract object or kwargs.")
@@ -43,8 +30,8 @@ class Option(Instrument):
     IB_CLS = Option
 
 class Trade:
-    def __init__(self, env: Environment, strategies):
-        self._env = env # <-- Dependency Injection
+    def __init__(self, strategies):
+        self._env = Environment()
         self._strategies = strategies
         self.trades = {}
 
@@ -73,10 +60,12 @@ class Trade:
             for prop, value in order_properties.items():
                 setattr(order, prop, value)
 
+            # --- FINAL FIX: placeOrder is not a coroutine, do not await it ---
             trade = self._env.ibgw.placeOrder(trade_info['contract'], order)
             
             if trade:
-                await self._env.ibgw.sleep(0)
+                # Wait for the order to be submitted to the broker
+                await trade.orderStatus.statusEvent.wait()
                 orders.append({
                     'orderId': trade.order.orderId,
                     'symbol': trade.contract.symbol,
