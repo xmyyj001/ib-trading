@@ -76,8 +76,7 @@ class Trade:
             trade = self._env.ibgw.placeOrder(trade_info['contract'], order)
             
             if trade:
-                # --- FINAL FIX: Use asyncio.sleep() instead of ib.sleep() ---
-                await asyncio.sleep(0.1) # Yield control to the event loop to process status updates
+                await self._env.ibgw.sleep(0)
                 orders.append({
                     'orderId': trade.order.orderId,
                     'symbol': trade.contract.symbol,
