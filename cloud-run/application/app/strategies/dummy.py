@@ -24,7 +24,7 @@ class Dummy(Strategy):
     def _setup(self):
         from lib.trading import InstrumentSet, Stock
         self._instruments = {
-            'spy': InstrumentSet(Stock('SPY', 'ARCA', 'USD'))
+            'spy': InstrumentSet(Stock('SPY', 'SMART', 'USD'))
         }
         if self._instruments['spy'].constituents:
             spy_inst = self._instruments['spy'].constituents[0]

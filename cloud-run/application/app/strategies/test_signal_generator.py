@@ -18,7 +18,7 @@ class TestSignalGenerator(Intent):
 
         # --- Phase 1: Contract Qualification ---
         try:
-            spy_obj = Stock('SPY', 'ARCA', 'USD')
+            spy_obj = Stock('SPY', 'SMART', 'USD')
             vixy_obj = Stock('VIXY', 'BATS', 'USD')
             qualified_contracts = await self._env.ibgw.qualifyContractsAsync(spy_obj, vixy_obj)
             spy_instrument = StockInstrument(self._env, ib_contract=qualified_contracts[0])
@@ -66,14 +66,19 @@ class TestSignalGenerator(Intent):
             return {"status": "No signal generated."}
 
         # --- Phase 4: Place Order ---
-        trade_obj = Trade(self._env, [])
-        trade_obj.trades = {
-            conId: {
-                'quantity': int(weight * 10),
-                'contract': spy_instrument.contract
-            }
+        # Simulate a strategy object by setting trades and contracts attributes on self
+        self.trades = {
+            conId: int(weight * 10)
             for conId, (weight, price) in signals.items() if weight != 0
         }
+        self.contracts = {
+            conId: spy_instrument.contract
+            for conId, (weight, price) in signals.items() if weight != 0
+        }
+
+        # Use the standard Trade class workflow
+        trade_obj = Trade(self._env, [self])
+        trade_obj.consolidate_trades()
 
         if not self._dry_run:
             order_params = {'lmtPrice': last_price}
