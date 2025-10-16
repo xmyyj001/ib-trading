@@ -66,19 +66,28 @@ class TestSignalGenerator(Intent):
             return {"status": "No signal generated."}
 
         # --- Phase 4: Place Order ---
-        # Simulate a strategy object by setting trades and contracts attributes on self
+        if not signals:
+            self._env.logging.info("Signal dictionary is empty. No trades to place.")
+            return {"status": "No signals available to generate trades."}
+
+        # 1. 让意图自身拥有 trades 和 contracts 属性，模拟一个策略对象
         self.trades = {
             conId: int(weight * 10)
-            for conId, (weight, price) in signals.items() if weight != 0
+            for conId, (weight, price) in signals.items()
         }
         self.contracts = {
             conId: spy_instrument.contract
-            for conId, (weight, price) in signals.items() if weight != 0
+            for conId in signals.keys()
         }
 
-        # Use the standard Trade class workflow
+        # 2. 将自身作为策略传入 Trade 对象，并调用 consolidate_trades
         trade_obj = Trade(self._env, [self])
         trade_obj.consolidate_trades()
+
+        # 检查 consolidate_trades 的结果
+        if not trade_obj.trades:
+            self._env.logging.warning("Consolidated trades are empty. No orders will be placed.")
+            return {"status": "No trades after consolidation."}
 
         if not self._dry_run:
             order_params = {'lmtPrice': last_price}
