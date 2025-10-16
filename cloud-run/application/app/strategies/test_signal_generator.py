@@ -70,21 +70,19 @@ class TestSignalGenerator(Intent):
             self._env.logging.info("Signal dictionary is empty. No trades to place.")
             return {"status": "No signals available to generate trades."}
 
-        # 1. 让意图自身拥有 trades 和 contracts 属性，模拟一个策略对象
-        self.trades = {
-            conId: int(weight * 10)
-            for conId, (weight, price) in signals.items()
-        }
-        self.contracts = {
-            conId: spy_instrument.contract
+        # 1. Correctly set _signals, _contracts, and _exposure to match the Trade class's requirements
+        self._signals = signals
+        self._contracts = {
+            conId: spy_instrument
             for conId in signals.keys()
         }
+        self._exposure = self._env.config['exposure']['strategies'].get('testsignalgenerator', 0)
 
-        # 2. 将自身作为策略传入 Trade 对象，并调用 consolidate_trades
+        # 2. Pass self as a strategy to the Trade object
         trade_obj = Trade(self._env, [self])
         trade_obj.consolidate_trades()
 
-        # 检查 consolidate_trades 的结果
+        # Check the result of consolidation
         if not trade_obj.trades:
             self._env.logging.warning("Consolidated trades are empty. No orders will be placed.")
             return {"status": "No trades after consolidation."}
