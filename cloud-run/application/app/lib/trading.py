@@ -58,7 +58,12 @@ class Trade:
                         continue
                     self.trades[conId] = {'quantity': 0, 'contract': strategy._contracts[conId].contract}
                 if price > 0:
-                    self.trades[conId]['quantity'] += int(strategy._exposure * weight / price)
+                    calculated_quantity = strategy._exposure * weight / price
+                    if 0 < abs(calculated_quantity) < 1:
+                        final_quantity = 1 if calculated_quantity > 0 else -1
+                    else:
+                        final_quantity = int(calculated_quantity)
+                    self.trades[conId]['quantity'] += final_quantity
 
     async def place_orders_async(self, OrderClass, order_params={}, order_properties={}):
         if not self.trades:
