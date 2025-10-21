@@ -45,7 +45,7 @@ class Option(Instrument):
 class Trade:
     def __init__(self, env: Environment, strategies):
         self._env = env # <-- Dependency Injection
-        self._strategies = strategies
+        self._strategies = strategies if isinstance(strategies, list) else [strategies]
         self.trades = {}
 
     def consolidate_trades(self):
@@ -58,11 +58,7 @@ class Trade:
                         continue
                     self.trades[conId] = {'quantity': 0, 'contract': strategy._contracts[conId].contract}
                 if price > 0:
-                    calculated_quantity = strategy._exposure * weight / price
-                    if 0 < abs(calculated_quantity) < 1:
-                        final_quantity = 1 if calculated_quantity > 0 else -1
-                    else:
-                        final_quantity = int(calculated_quantity)
+                    final_quantity = int(strategy._exposure * weight / price)
                     self.trades[conId]['quantity'] += final_quantity
 
     async def place_orders_async(self, OrderClass, order_params={}, order_properties={}):
