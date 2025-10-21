@@ -78,6 +78,7 @@ class TestSignalGenerator(Intent):
 
     def __init__(self, env, **kwargs):
         super().__init__(env, **kwargs)
+        self.id = self.__class__.__name__.lower()
         self._dry_run = False
 
     async def _core_async(self):

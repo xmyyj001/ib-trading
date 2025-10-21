@@ -16,14 +16,24 @@ class CashBalancer(Intent):
     async def _core_async(self):
         self._env.logging.info('Checking cash balances...')
 
-        account_values = await self._env.get_account_values_async(self._env.config['account'],
-                                                      rows=['NetLiquidation', 'CashBalance', 'ExchangeRate'])
-        base_currency = [*account_values['NetLiquidation'].keys()][0]
-        exposure = {
-            k: v * account_values['ExchangeRate'][k]
-            for k, v in account_values['CashBalance'].items()
-            if k != base_currency
-        }
+        # 1. 获取完整的账户摘要
+        summary = await self._env.ibgw.reqAccountSummaryAsync(self._env.config['account'])
+        
+        # 2. 从完整的摘要中手动提取所需的值
+        account_values = {v.tag: {v.currency: v.value} for v in summary}
+
+        base_currency = next((c for c, v in account_values.get('NetLiquidation', {}).items()), 'USD')
+        
+        # 3. 手动构建 exposure，并处理 ExchangeRate 可能不存在的情况
+        exposure = {}
+        if 'CashBalance' in account_values and 'ExchangeRate' in account_values:
+            for k, v in account_values['CashBalance'].items():
+                if k != base_currency:
+                    exchange_rate = account_values['ExchangeRate'].get(k, 1.0) # 如果没有汇率，默认为1
+                    exposure[k] = float(v) * float(exchange_rate)
+        else:
+            self._env.logging.warning("Could not find 'CashBalance' or 'ExchangeRate' in account summary.")
+
         self._activity_log.update(exposure=exposure)
         trades = {
             k + base_currency: -(int(v / account_values['ExchangeRate'][k]) // 1000 * 1000)

@@ -14,7 +14,7 @@ class Reconcile(Intent):
 
         # 2. Get all strategy holding documents from Firestore
         holdings_ref = self._env.db.collection(f'positions/{self._env.trading_mode}/holdings')
-        strategy_docs = [doc async for doc in holdings_ref.stream()]
+        strategy_docs = [doc for doc in holdings_ref.stream()]
         
         # 3. Clear all existing strategy holdings
         for doc in strategy_docs:
