@@ -52,14 +52,31 @@ class Trade:
         for strategy in self._strategies:
             if not hasattr(strategy, '_signals') or not strategy._signals:
                 continue
-            for conId, (weight, price) in strategy._signals.items():
+            
+            for conId, signal_data in strategy._signals.items():
                 if conId not in self.trades:
                     if conId not in strategy._contracts:
                         continue
                     self.trades[conId] = {'quantity': 0, 'contract': strategy._contracts[conId].contract}
-                if price > 0:
-                    final_quantity = int(strategy._exposure * weight / price)
-                    self.trades[conId]['quantity'] += final_quantity
+
+                # --- 关键修改：检查信号格式 ---
+                if len(signal_data) == 3:
+                    # 格式: (weight, price, safe_quantity)
+                    _, _, final_quantity = signal_data
+                    self._env.logging.info(f"Using pre-validated quantity {final_quantity} for conId {conId}.")
+                elif len(signal_data) == 2:
+                    # 原始格式: (weight, price)
+                    weight, price = signal_data
+                    if price > 0:
+                        final_quantity = int(strategy._exposure * weight / price)
+                        self._env.logging.info(f"Calculating quantity {final_quantity} based on weight for conId {conId}.")
+                    else:
+                        final_quantity = 0
+                else:
+                    self._env.logging.warning(f"Invalid signal format for conId {conId}: {signal_data}")
+                    continue
+                
+                self.trades[conId]['quantity'] += final_quantity
 
     async def place_orders_async(self, OrderClass, order_params={}, order_properties={}):
         if not self.trades:

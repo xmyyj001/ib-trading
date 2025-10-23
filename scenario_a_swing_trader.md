@@ -4,6 +4,42 @@
 
 此方案的目标是构建一个稳健的、低频的自动化交易系统。它在每日收盘后进行决策，旨在抓住持续数天或更长时间的市场趋势，并接受持仓隔夜。该模式逻辑简单，信号稳定，能有效过滤盘中噪音，且云资源和交易成本都非常低。
 
+在项目初期，我们采用了一种非常经典和直观的架构模式，可以称之为**“总指挥模式”**。这个模式的核心是 `allocation` 这个意图（Intent）。
+
+### 1.1 “总指挥” allocation 的工作流程
+
+让我们用一个餐厅的厨房来比喻这个模式：
+
+*   **`allocation` 意图**：是厨房的**行政总厨**。他不亲自炒菜，但他决定今晚要做哪些菜，以及每道菜用多少预算。
+*   **策略 (如 `spymacdvixy`)**：是负责研发菜谱的**菜品研发员**。他们只负责提供“菜谱”（交易信号），比如“今天适合多放点辣”（看涨信号，权重 `1.0`）或者“今天应该清淡点”（看跌信号，权重 `-0.5`）。他们不关心这道菜具体要炒多少份，也不关心后厨的采购成本。
+*   **HTTP 请求**: 是来自前厅的**订单**。订单上写着：“尊敬的总厨，请用今晚的预算，做一份‘辣子鸡丁’（`spymacdvixy`）和一份‘清炒时蔬’（`dummy`）。”
+
+**工作流程如下**：
+
+1.  “总厨”(`allocation`) 接到订单，看到需要做 `spymacdvixy` 和 `dummy` 两道菜。
+2.  他去问 `spymacdvixy` 的研发员：“今天的菜谱是什么？” 研发员回答：“多放辣（权重 `1.0`）。”
+3.  他又去问 `dummy` 的研发员，得到另一份菜谱。
+4.  “总厨”拿到所有菜谱后，拿出厨房的总预算（账户净值 `netLiquidation`），根据每道菜的权重，计算出具体要用多少钱来买原材料（`exposure * weight`），然后根据原材料市价（`price`），计算出要买多少斤（`quantity`）。
+5.  最后，“总厨”把采购清单交给采购员（`place_order` 方法），完成下单。
+
+### 1.2 对“总指挥”模式的评价
+
+这种模式对于初创项目来说，非常清晰易懂。
+
+*   **优点：集中控制**
+    *   **资金管理**: 所有的资金分配都由“总厨”一人负责，绝对不会超预算。全局风险控制非常容易。
+    *   **策略简单**: “菜品研发员”非常省心，只需要专注于味道（信号强弱），不需要考虑成本和库存，开发新“菜谱”很快。
+
+*   **缺点：僵化与瓶颈**
+    *   **总厨是瓶颈**: 随着餐厅菜品越来越多，“总厨”需要了解的菜谱也越来越多，他的工作变得异常复杂。如果某道菜需要一种特殊的烹饪技巧（例如，不是炒，而是低温慢煮），“总厨”就必须亲自去学，他的能力决定了整个厨房的上限。
+        *   **对应到代码**: 如果一个新策略需要特殊的订单类型（如期权组合单）或下单逻辑，“总厨” `allocation` 就必须被修改，变得越来越臃g肿和难以维护。
+    *   **沟通模糊**: “菜谱”里的“多放点辣”是一个很模糊的概念。到底放多少？“总厨”只能根据自己的理解（`exposure * weight / price`）去转换。当厨房预算很少，或者辣椒很贵时，他计算出的辣椒用量可能是 `0.01` 克，取整后就变成了 `0`，导致菜里最终没有放辣。
+        *   **对应到代码**: 这正是我们遇到的 `int(0.xx)` 问题。策略提供的抽象 `weight` 无法保证在所有资金和价格下都能转换成有效的交易数量。
+
+**结论**：“总指挥”模式在系统规模扩大、策略复杂度增加后，其**灵活性不足和沟通模糊**的缺点会成为严重的瓶颈。因此，我们需要一种新的、更能适应变化的架构。
+
+---
+
 ## 2. Firestore 与 Scheduler 设定
 
 ### 2.1 Firestore 配置
@@ -45,83 +81,6 @@
 
 ---
 
-## 3. 核心代码实现 (基础版本)
-
-此基础版本实现了场景A的核心交易逻辑，即在收盘后运行，并能根据配置使用不同的订单类型（如LMT/MOC）。但请注意，此版本**未处理**在途的隔夜订单（GTC），在连续运行时有重复下单的风险。后续章节将解决此问题。
-
-### `cloud-run/application/app/intents/allocation.py` (基础版本)
-
-```python
-from datetime import datetime, timedelta
-import dateparser
-from ib_insync import MarketOrder, LimitOrder, Order, TagValue
-import ib_insync
-
-from intents.intent import Intent
-from lib.trading import Trade
-from strategies import STRATEGIES
-
-class Allocation(Intent):
-
-    _dry_run = False
-    _order_properties = {}
-    _strategies = {}
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self._dry_run = kwargs.get('dryRun', self._dry_run)
-        self._order_properties = kwargs.get('orderProperties', {})
-        strategies = kwargs.get('strategies', [])
-        if any([s not in STRATEGIES.keys() for s in strategies]):
-            raise KeyError(f"Unknown strategies: {','.join([s for s in strategies if s not in STRATEGIES.keys()])}")
-        self._strategies = {s: STRATEGIES[s] for s in strategies}
-        self._activity_log.update(dryRun=self._dry_run, orderProperties=self._order_properties, strategies=strategies)
-
-    def _core(self):
-        if (overall_exposure := self._env.config['exposure']['overall']) == 0:
-            self._env.logging.info('Aborting allocator as overall exposure is 0')
-            return
-
-        self._env.logging.info(f"Running allocator for {', '.join(self._strategies.keys())}...")
-        account_values = self._env.get_account_values(self._env.config['account'])
-        base_currency, net_liquidation = list(account_values['NetLiquidation'].items())[0]
-        self._activity_log.update(netLiquidation=net_liquidation)
-
-        strategies_instances = []
-        for k, v in self._strategies.items():
-            if strategy_exposure := self._env.config['exposure']['strategies'].get(k, 0):
-                self._env.logging.info(f'Getting signals for {k}...')
-                try:
-                    strategies_instances.append(v(base_currency=base_currency, exposure=net_liquidation * overall_exposure * strategy_exposure))
-                except Exception as exc:
-                    self._env.logging.error(f'{exc.__class__.__name__} running strategy {k}: {exc}')
-        
-        trades = Trade(strategies_instances)
-        trades.consolidate_trades()
-        self._activity_log.update(consolidatedTrades={v['contract'].local_symbol: v['quantity'] for v in trades.trades.values()})
-        self._env.logging.info(f"Consolidated trades: {self._activity_log['consolidatedTrades']}")
-
-        if not self._dry_run:
-            order_type_str = self._env.config.get('defaultOrderType', 'MKT')
-            order_type_map = {
-                'MKT': MarketOrder,
-                'LMT': LimitOrder,
-                'MOC': Order,
-            }
-            OrderClass = order_type_map.get(order_type_str, MarketOrder)
-            order_params = {}
-            if order_type_str == 'MOC':
-                order_params = {'orderType': 'MOC'}
-
-            orders = trades.place_orders(OrderClass,
-                                         order_params=order_params,
-                                         order_properties={**self._order_properties, 'tif': self._env.config.get('defaultOrderTif', 'DAY')})
-            self._activity_log.update(orders=orders)
-            self._env.logging.info(f"Orders placed: {self._activity_log['orders']}")
-```
-
----
-
 ## 4. 安全与干预机制 (最低标准)
 
 此章节为基础版本增加必要的安全功能，是生产投用的最低要求。
@@ -131,62 +90,6 @@ class Allocation(Intent):
 **实现**: 修改 `intent.py` 基类，在执行任何操作前检查 Firestore 中的 `tradingEnabled` 标志。
 
 **完整代码**: `cloud-run/application/app/intents/intent.py`
-```python
-import json
-from datetime import datetime
-from hashlib import md5
-from lib.environment import Environment
-
-class Intent:
-    _activity_log = {}
-    def __init__(self, **kwargs):
-        self._env = Environment()
-        hashstr = self._env.env.get('K_REVISION', 'localhost') + self.__class__.__name__ + json.dumps(kwargs, sort_keys=True)
-        self._signature = md5(hashstr.encode()).hexdigest()
-        self._activity_log = {
-            'agent': self._env.env.get('K_REVISION', 'localhost'),
-            'config': self._env.config,
-            'exception': None,
-            'intent': self.__class__.__name__,
-            'signature': self._signature,
-            'tradingMode': self._env.trading_mode
-        }
-
-    def _core(self):
-        return {'currentTime': self._env.ibgw.reqCurrentTime().isoformat()}
-
-    def _log_activity(self):
-        if len(self._activity_log):
-            try:
-                self._activity_log.update(timestamp=datetime.utcnow())
-                self._env.db.collection('activity').document().set(self._activity_log)
-            except Exception as e:
-                self._env.logging.error(e)
-                self._env.logging.info(self._activity_log)
-
-    def run(self):
-        retval = {}
-        exc = None
-        try:
-            if not self._env.config.get('tradingEnabled', True):
-                raise SystemExit("Trading is globally disabled by kill switch in Firestore config.")
-            self._env.ibgw.start_and_connect()
-            self._env.ibgw.reqMarketDataType(self._env.config['marketDataType'])
-            retval = self._core()
-        except Exception as e:
-            error_str = f'{e.__class__.__name__}: {e}'
-            self._env.logging.error(error_str)
-            self._activity_log.update(exception=error_str)
-            exc = e
-        finally:
-            self._env.ibgw.stop_and_terminate()
-            if self._env.env.get('K_REVISION', 'localhost') != 'localhost':
-                self._log_activity()
-            if exc is not None:
-                raise exc
-            self._env.logging.info('Done.')
-            return retval or {**self._activity_log, 'timestamp': self._activity_log['timestamp'].isoformat()}
-```
 
 ### 4.2 核心监控与警报
 
@@ -199,399 +102,40 @@ class Intent:
 **实现**: 新增一个 `/reconcile` 意图，用于在手动干预后，强制将系统状态与券商同步。
 
 **新增文件**: `cloud-run/application/app/intents/reconcile.py`
-```python
-from intents.intent import Intent
 
-class Reconcile(Intent):
-    def _core(self):
-        self._env.logging.warning("Starting manual reconciliation...")
-        ib_positions = self._env.ibgw.reqPositions()
-        broker_portfolio = {str(p.contract.conId): p.position for p in ib_positions}
-        holdings_ref = self._env.db.collection(f'positions/{self._env.trading_mode}/holdings')
-        for doc in list(holdings_ref.stream()):
-            doc.reference.delete()
-        if broker_portfolio:
-            recon_doc_ref = holdings_ref.document('reconciled_holdings')
-            recon_doc_ref.set(broker_portfolio)
-        result = {"status": "Reconciliation complete", "reconciledPortfolio": broker_portfolio}
-        self._activity_log.update(**result)
-        return result
-```
 
 **修改文件**: `cloud-run/application/app/main.py` (注册新意图)
-```python
-# ... (部分 imports)
-from intents.allocation import Allocation
-from intents.reconcile import Reconcile
-# ... (其他 intents)
 
-INTENTS = {
-    'allocation': Allocation,
-    'reconcile': Reconcile,
-    # ... (其他 intents)
-}
-```
 
----
+### 4.4 进阶完善：处理隔夜订单 (GTC) 与状态管理
 
-## 5. 进阶完善：处理隔夜订单 (GTC) 与状态管理
+这个版本解决了基础版本中的核心缺陷，能够正确管理在途的隔夜订单，是进行波段交易的健壮实现。
 
-此最终版本解决了基础版本中的核心缺陷，能够正确管理在途的隔夜订单，是进行波段交易的健壮实现。
+### 有关文件 1: `cloud-run/application/app/lib/trading.py`
 
-### 升级文件 1: `cloud-run/application/app/lib/trading.py`
+### 有关文件 2: `cloud-run/application/app/strategies/strategy.py`
 
-```python
-from abc import ABC
-from datetime import datetime, timedelta, timezone
-import ib_insync
-from google.cloud.firestore_v1 import DELETE_FIELD
-from lib.environment import Environment
-from lib.gcp import GcpModule
-
-# (Instrument, Contract, Forex, Future, Index, Stock, InstrumentSet 不变)
-
-class Trade:
-    _trades = {}
-    _trade_log = {}
-
-    def __init__(self, strategies=()):
-        self._env = Environment()
-        self._strategies = strategies
-
-    @property
-    def trades(self):
-        return self._trades
-
-    def consolidate_trades(self):
-        self._trades = {}
-        for strategy in self._strategies:
-            for k, v in strategy.trades.items():
-                if k not in self._trades:
-                    self._trades[k] = {}
-                self._trades[k]['contract'] = strategy.contracts[k]
-                self._trades[k]['lmtPrice'] = v.get('lmtPrice', 0)
-                self._trades[k]['quantity'] = self._trades[k].get('quantity', 0) + v['quantity']
-                self._trades[k]['source'] = self._trades[k].get('source', {})
-                self._trades[k]['source'][strategy.id] = v['quantity']
-        self._trades = {k: v for k, v in self._trades.items() if v['quantity'] != 0}
-
-    def _log_trades(self, trades=None):
-        # (此方法在之前的分析中未详细展开，此处保持项目原样或根据需要实现)
-        pass
-
-    def place_orders(self, order_type=ib_insync.MarketOrder, order_params=None, order_properties=None):
-        order_properties = order_properties or {}
-        order_params = order_params or {}
-        perm_ids = []
-        for v in self._trades.values():
-            if order_type == ib_insync.LimitOrder:
-                order_params['lmtPrice'] = v['lmtPrice']
-            
-            # 将策略ID作为orderRef传递，用于后续识别订单来源
-            if 'orderRef' not in order_properties and 'source' in v:
-                order_properties['orderRef'] = list(v['source'].keys())[0]
-
-            order = self._env.ibgw.placeOrder(v['contract'].contract,
-                                              order_type(action='BUY' if v['quantity'] > 0 else 'SELL',
-                                                         totalQuantity=abs(v['quantity']), 
-                                                         **order_params).update(**{'tif': 'GTC', **order_properties}))
-            self._env.ibgw.sleep(2)
-            perm_ids.append(order.order.permId)
-        self._env.logging.debug(f'Order permanent IDs: {perm_ids}')
-        self._trade_log = self._log_trades([t for t in self._env.ibgw.trades() if t.order.permId in perm_ids])
-        return self._trade_log
-```
-
-### 升级文件 2: `cloud-run/application/app/strategies/strategy.py`
-
-```python
-from lib.environment import Environment
-from lib.trading import Contract, Forex, Instrument, InstrumentSet
-
-class Strategy:
-    _contracts = {}
-    _fx = {}
-    _holdings = {}
-    _instruments = {}
-    _signals = {}
-    _target_positions = {}
-    _trades = {}
-    _open_orders = {}
-
-    def __init__(self, _id=None, open_orders=None, **kwargs):
-        self._id = _id or self.__class__.__name__.lower()
-        self._env = Environment()
-        self._base_currency = kwargs.get('base_currency', None)
-        self._exposure = kwargs.get('exposure', 0)
-        self._open_orders = open_orders or {}
-
-        self._setup()
-        self._get_holdings()
-        self._get_signals()
-
-        contract_ids = set([*self._signals.keys()] + [*self._holdings.keys()] + [*self._open_orders.keys()])
-        
-        virtual_holdings = {**self._holdings}
-        for conId, order in self._open_orders.items():
-            qty = order.totalQuantity if order.action == 'BUY' else -order.totalQuantity
-            virtual_holdings[conId] = virtual_holdings.get(conId, 0) + qty
-
-        self._holdings = {**{cid: 0 for cid in contract_ids}, **self._holdings}
-        self._signals = {**{cid: (0, 0) for cid in contract_ids}, **self._signals}
-        
-        self._calculate_target_positions()
-        self._calculate_trades(virtual_holdings)
-
-    # ... (properties remain unchanged) ...
-
-    def _calculate_target_positions(self):
-        if self._base_currency is not None and self._exposure:
-            for k, v_tuple in self._signals.items():
-                if (c := self._contracts[k]).tickers is None:
-                    c.get_tickers()
-            self._get_currencies(self._base_currency)
-
-            self._target_positions = {}
-            for k, v_tuple in self._signals.items():
-                weight, price = v_tuple
-                if weight != 0 and price > 0:
-                    self._target_positions[k] = round(self._exposure * weight
-                                     / (price * int(self._contracts[k].contract.multiplier) * self._fx[self._contracts[k].contract.currency]))
-                else:
-                    self._target_positions[k] = 0
-        else:
-            self._target_positions = {k: 0 for k in self._signals.keys()}
-
-    def _calculate_trades(self, virtual_holdings):
-        self._trades = {}
-        for k, v in self._target_positions.items():
-            trade_qty = v - virtual_holdings.get(k, 0)
-            if trade_qty != 0:
-                self._trades[k] = {'quantity': trade_qty, 'lmtPrice': self._signals[k][1]}
-        self._env.logging.info(f"Trades for {self._id}: { {self._contracts[k].local_symbol: v['quantity'] for k, v in self._trades.items()} }")
-
-    def _get_signals(self):
-        # This method must now return a dict of {conId: (weight, price)}
-        # Example: return {12345: (1.0, 450.50)} for long SPY at 450.50
-        self._signals = { k: (0, 0) for k in self._holdings.keys() }
-
-    # ... (other methods like _get_holdings, _get_currencies, _register_contracts, _setup remain unchanged) ...
-```
-
-### 升级文件 3: `cloud-run/application/app/intents/allocation.py` (最终版)
-
-```python
-from datetime import datetime, timedelta
-import dateparser
-from ib_insync import LimitOrder
-from intents.intent import Intent
-from lib.trading import Trade
-from strategies import STRATEGIES
-
-class Allocation(Intent):
-    # ... (__init__ remains unchanged) ...
-
-    def _cancel_stale_orders(self, open_orders, trades):
-        for conId, order in open_orders.items():
-            trade_for_contract = trades.get(conId)
-            if trade_for_contract is None:
-                continue
-
-            new_action = 'BUY' if trade_for_contract['quantity'] > 0 else 'SELL'
-            if new_action != order.action:
-                self._env.logging.warning(f"Cancelling stale GTC order {order.orderId} for {order.action} {order.totalQuantity} of conId {conId}")
-                self._env.ibgw.cancelOrder(order)
-
-    def _core(self):
-        all_open_orders = self._env.ibgw.reqOpenOrders()
-        self._env.ibgw.sleep(2)
-
-        account_values = self._env.get_account_values(self._env.config['account'])
-        base_currency, net_liquidation = list(account_values['NetLiquidation'].items())[0]
-        self._activity_log.update(netLiquidation=net_liquidation)
-
-        strategies_instances = []
-        for k, v in self._strategies.items():
-            if strategy_exposure := self._env.config['exposure']['strategies'].get(k, 0):
-                self._env.logging.info(f'Getting signals for {k}...')
-                try:
-                    strategy_open_orders = {o.contract.conId: o for o in all_open_orders if o.orderRef == k}
-                    strategies_instances.append(v(base_currency=base_currency, 
-                                        exposure=net_liquidation * overall_exposure * strategy_exposure,
-                                        open_orders=strategy_open_orders,
-                                        _id=k))
-                except Exception as exc:
-                    self._env.logging.error(f'{exc.__class__.__name__} running strategy {k}: {exc}')
-        
-        trades = Trade(strategies_instances)
-        trades.consolidate_trades()
-        self._activity_log.update(consolidatedTrades={v['contract'].local_symbol: v['quantity'] for v in trades.trades.values()})
-        self._env.logging.info(f"Consolidated trades: {self._activity_log['consolidatedTrades']}")
-
-        if not self._dry_run:
-            self._cancel_stale_orders({o.contract.conId: o for o in all_open_orders}, trades.trades)
-            OrderClass = LimitOrder
-            orders = trades.place_orders(OrderClass)
-            self._activity_log.update(orders=orders)
-            self._env.logging.info(f"Orders placed: {self._activity_log['orders']}")
-```
+### 有关文件 3: `cloud-run/application/app/intents/allocation.py` 
 
 ---
 
-## 附录 A: 初始化Firestore的推荐脚本 (场景A)
-
+##  初始化Firestore `init_firestore.py` 
 在首次部署或需要重置数据库配置时，推荐使用以下脚本来初始化 Firestore。此脚本专为**场景A（波段交易）**定制，包含了所有必要的安全和交易参数。
-
-**使用方法**:
-1.  将以下内容保存或覆盖到 `cloud-run/application/app/lib/init_firestore.py` 文件中。
-2.  在您的终端中，进入 `cloud-run/application/app` 目录。
-3.  运行命令: `python lib/init_firestore.py [YOUR_PROJECT_ID]`
-
-### `init_firestore.py` (场景A版本)
-
-```python
-import sys
-from google.cloud import firestore
-
-if len(sys.argv) < 2:
-    print("错误：请提供项目ID作为第一个参数。")
-    print("用法: python lib/init_firestore.py YOUR_PROJECT_ID")
-    sys.exit(1)
-
-project_id = sys.argv[1]
-print(f"正在为项目 '{project_id}' 初始化 Firestore 配置 (场景A: 波段交易)...")
-
-db = firestore.Client(project=project_id)
-
-config_data = {
-    "common": {
-        "tradingEnabled": False,
-        "enforceFlatEod": False,
-        "marketDataType": 2,
-        "defaultOrderType": "LMT",
-        "defaultOrderTif": "GTC",
-        "retryCheckMinutes": 1440,
-        "exposure": {
-            "overall": 0.9,
-            "strategies": {
-                "spymacdvixy": 1.0,
-                "dummy": 1.0
-            }
-        }
-    },
-    "paper": {
-        "account": "[REPLACE_WITH_YOUR_PAPER_ACCOUNT]"
-    },
-    "live": {
-        "account": "[REPLACE_WITH_YOUR_LIVE_ACCOUNT]"
-    }
-}
-
-def initialize_firestore():
-    """Writes the defined configuration to Firestore, overwriting existing docs."""
-    for doc_id, data in config_data.items():
-        doc_ref = db.collection("config").document(doc_id)
-        try:
-            doc_ref.set(data)
-            print(f"成功创建/更新文档: 'config/{doc_id}'")
-        except Exception as e:
-            print(f"错误：写入文档 'config/{doc_id}'失败: {e}")
-            sys.exit(1)
-    
-    print("
-Firestore 配置初始化完成。")
-    print("重要提示: 请记得到 Firestore 控制台将 config/common -> tradingEnabled 设置为 true 以开启交易。")
-
-if __name__ == "__main__":
-    initialize_firestore()
-```
-
----
-
-## 附录 B: 最终策略代码 (场景A)
 
 为确保本文档的完整性，此处提供与上述进阶方案完全兼容的 `spymacdvixy.py` 策略代码。
 
 ### `cloud-run/application/app/strategies/spy_macd_vixy.py` (最终版)
 
-```python
-import pandas as pd
-from ib_insync import util
-from strategies.strategy import Strategy
-from lib.trading import Stock
 
-class SpyMacdVixy(Strategy):
-    """
-    A trading strategy based on the MACD indicator for SPY, with a hedge using VIXY.
-    - When MACD crosses above the signal line (bullish), go long SPY and close VIXY.
-    - When MACD crosses below the signal line (bearish), go short/neutral SPY and long VIXY.
-    """
 
-    def _setup(self):
-        """
-        Define the instruments required for this strategy.
-        """
-        self._env.logging.info("Setting up SpyMacdVixy strategy instruments...")
-        self.spy = Stock('SPY', 'ARCA', 'USD')
-        self.vixy = Stock('VIXY', 'BATS', 'USD')
-        self._register_contracts(self.spy, self.vixy)
+### 5. 演进**“策略即意图”**的新模式。
 
-    def _get_signals(self):
-        """
-        Calculate MACD for SPY and generate trading signals for SPY and VIXY.
-        Returns signals in the format {conId: (weight, price)}.
-        """
-        self._env.logging.info("Generating signals for SpyMacdVixy...")
-        
-        # 1. Fetch historical data for SPY
-        self._env.logging.info("Fetching historical data for SPY...")
-        bars = self._env.ibgw.reqHistoricalData(
-            self.spy.contract,
-            endDateTime='',
-            durationStr='100 D',
-            barSizeSetting='1 day',
-            whatToShow='TRADES',
-            useRTH=True
-        )
+## 因为项目的试运行，由allocation 调用 spy_macd_vixy 的策略并没有跑通。
+所以引入了"策略即意图"验证模式：每天可以产生交易信号以验证系统可行性的测试策略：`test_signal_generator.py` 
 
-        if not bars:
-            self._env.logging.error("Could not fetch historical data for SPY. Aborting.")
-            self._signals = { k: (0, 0) for k in self._holdings.keys() }
-            return
+## 对“总指挥” allocation 的补充讨论和疑问：
+1. 挂单管理 (Pending Orders): 计算可用资金时，必须查询 Firestore 中的 openOrders 集合，将所有“在途”的、未成交的挂单的名义价值也计算在内，并从可用额度中扣除。我将其比喻为“假装它已经成交”。
 
-        df = util.df(bars)
-        if df.empty:
-            self._env.logging.error("Historical data for SPY is empty. Aborting.")
-            self._signals = { k: (0, 0) for k in self._holdings.keys() }
-            return
-            
-        # 2. Calculate MACD
-        self._env.logging.info("Calculating MACD...")
-        exp12 = df['close'].ewm(span=12, adjust=False).mean()
-        exp26 = df['close'].ewm(span=26, adjust=False).mean()
-        macd = exp12 - exp26
-        signal = macd.ewm(span=9, adjust=False).mean()
+2.准确地计算当前持仓并管理: 可用资金 = 理论总额度 - 已有持仓的总市值 - 所有未成交挂单的名义价值
 
-        # Get latest closing price for limit orders
-        last_price = df.iloc[-1]['close']
-
-        # 3. Generate signals based on crossover
-        if macd.iloc[-1] > signal.iloc[-1] and macd.iloc[-2] < signal.iloc[-2]:
-            # Bullish crossover (Golden Cross)
-            self._env.logging.info(f"Bullish Crossover detected at price {last_price}: Long SPY, Close VIXY.")
-            self._signals = {
-                self.spy.id: (1.0, last_price),   # Target 100% allocation to long SPY
-                self.vixy.id: (0.0, 0.0)      # Target 0% allocation to VIXY
-            }
-        elif macd.iloc[-1] < signal.iloc[-1] and macd.iloc[-2] > signal.iloc[-2]:
-            # Bearish crossover (Death Cross)
-            self._env.logging.info(f"Bearish Crossover detected at price {last_price}: Short SPY, Long VIXY.")
-            self._signals = {
-                self.spy.id: (-1.0, last_price), # Target 100% allocation to short SPY
-                self.vixy.id: (1.0, last_price)  # Target 100% allocation to long VIXY (as hedge)
-            }
-        else:
-            # No new signal, maintain current positions by returning zero signals
-            self._env.logging.info("No new crossover detected. No change in signals.")
-            self._signals = { k: (0, 0) for k in self._holdings.keys() }
-```
+3. 平仓必须实现：将 close-all 重构为平仓“指令分发者”，针对指定的单个策略，准确地清算该策略的头寸。
