@@ -1,6 +1,6 @@
 # ===================================================================
-# == FINAL ARCHITECTURE v6: main.py
-# == Uses thread-safe queue.Queue for cross-thread communication.
+# == FINAL ARCHITECTURE v7: main.py (Resilient)
+# == Adds a top-level reconnection loop to the background thread.
 # ===================================================================
 
 import asyncio
@@ -12,7 +12,7 @@ from os import environ
 from fastapi import FastAPI, Request, Response
 import threading
 import uuid
-from queue import Queue, Empty, Full # <--- 关键修改：导入线程安全的队列
+from queue import Queue, Empty, Full
 
 from intents.allocation import Allocation
 from intents.cash_balancer import CashBalancer
@@ -25,56 +25,64 @@ from intents.reconcile import Reconcile
 from strategies.test_signal_generator import TestSignalGenerator
 from lib.environment import Environment
 
-# --- 1. 线程间通信设置 (现在使用线程安全的 queue.Queue) ---
+# --- 1. Thread Communication Setup ---
 request_queue = Queue(maxsize=1)
 results = {}
 
-# --- 2. ib_insync 后台线程的目标函数 ---
+# --- 2. IB Background Thread with Auto-Reconnect ---
 def ib_thread_loop(env, loop, queue, results_dict):
     asyncio.set_event_loop(loop)
-    
-    async def main_async_logic():
-        try:
-            logging.info("IB Thread: Attempting to connect...")
-            await env.ibgw.connectAsync(host='127.0.0.1', port=4002, clientId=1)
-            logging.info("IB Thread: Successfully connected.")
 
-            while True:
-                try:
-                    # --- 关键修改：使用阻塞的 get()，并设置超时 ---
-                    request_id, intent_class, body = queue.get(timeout=1.0)
-                except Empty:
-                    # 如果队列为空，继续循环，这可以让 asyncio 事件循环有机会处理其他事情
-                    await asyncio.sleep(0.01)
-                    continue
+    async def resilient_main_logic():
+        """Wraps the main logic in a perpetual auto-reconnect loop."""
+        while True:
+            try:
+                logging.info("IB Thread (Outer Loop): Attempting to connect...")
+                await env.ibgw.connectAsync(host='127.0.0.1', port=4002, clientId=1, timeout=15)
+                logging.info("IB Thread (Outer Loop): Successfully connected.")
 
-                logging.info(f"IB Thread: Received request {request_id} for intent {intent_class.__name__}")
-                result_data, error_str = {}, None
-                try:
-                    intent_instance = intent_class(env=env, **body)
-                    result_data = await intent_instance.run() # 假设 run 是 async
-                except Exception as e:
-                    logging.error(f"IB Thread: Error running intent: {e}", exc_info=True)
-                    error_str = f'{e.__class__.__name__}: {e}'
-                
-                results_dict[request_id] = (result_data, error_str)
-                queue.task_done()
-        except Exception as e:
-            logging.critical(f"IB Thread: Critical error: {e}", exc_info=True)
-        finally:
-            if env.ibgw.isConnected():
-                env.ibgw.disconnect()
-            logging.info("IB Thread: Shutdown.")
+                # --- Inner loop for processing requests ---
+                while True:
+                    try:
+                        request_id, intent_class, body = queue.get(timeout=1.0)
+                    except Empty:
+                        await asyncio.sleep(0.01)
+                        # Check connection status periodically in the inner loop
+                        if not env.ibgw.isConnected():
+                            logging.warning("IB Thread (Inner Loop): Connection lost. Breaking to reconnect.")
+                            break # Break inner loop to trigger reconnection
+                        continue
 
-    loop.run_until_complete(main_async_logic())
+                    logging.info(f"IB Thread: Received request {request_id} for {intent_class.__name__}")
+                    result_data, error_str = {}, None
+                    try:
+                        intent_instance = intent_class(env=env, **body)
+                        result_data = await intent_instance.run()
+                    except Exception as e:
+                        logging.error(f"IB Thread: Error running intent: {e}", exc_info=True)
+                        error_str = f'{e.__class__.__name__}: {e}'
+                    
+                    results_dict[request_id] = (result_data, error_str)
+                    queue.task_done()
+
+            except asyncio.TimeoutError:
+                 logging.warning("IB Thread: Connection attempt timed out. Retrying in 15s...")
+                 await asyncio.sleep(15)
+            except Exception as e:
+                logging.critical(f"IB Thread (Outer Loop): Critical error: {e}", exc_info=True)
+            finally:
+                if env.ibgw.isConnected():
+                    env.ibgw.disconnect()
+                logging.info("IB Thread (Outer Loop): Disconnected. Attempting reconnection in 15 seconds...")
+                await asyncio.sleep(15)
+
+    loop.run_until_complete(resilient_main_logic())
 
 # --- 3. Lifespan Manager ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logging.info("Lifespan: Startup...")
     app.state.env = Environment()
-    
-    # 将全局的线程安全队列和字典附加到 app.state
     app.state.request_queue = request_queue
     app.state.results = results
 
@@ -89,7 +97,7 @@ async def lifespan(app: FastAPI):
     yield
     logging.info("Lifespan: Shutdown.")
 
-# --- 4. FastAPI App 和路由 ---
+# --- 4. FastAPI App & Routes ---
 logging.basicConfig(level=logging.INFO)
 app = FastAPI(lifespan=lifespan)
 
@@ -117,7 +125,6 @@ async def handle_intent(intent: str, request: Request):
         raise ValueError(f"Unknown intent received: {intent}")
     request_id = str(uuid.uuid4())
     try:
-        # --- 关键修改：使用非阻塞的 put_nowait() ---
         request.app.state.request_queue.put_nowait((request_id, INTENTS[intent], body))
     except Full:
         return Response(content=json.dumps({"error": "Service is busy"}), status_code=503)
