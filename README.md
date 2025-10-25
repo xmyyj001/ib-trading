@@ -125,7 +125,12 @@ TOKEN=$(gcloud auth print-identity-token)
 这是一个 `POST` 请求，因为它会产生实际的交易行为。
 
 ```bash
-curl -X POST -H "Authorization: Bearer ${TOKEN}" "${SERVICE_URL}/testsignalgenerator"
+##curl -X POST -H "Authorization: Bearer ${TOKEN}" "${SERVICE_URL}/testsignalgenerator"
+curl -X POST -H "Authorization: Bearer ${TOKEN}" \
+   -H "Content-Type: application/json" \
+   -d '{}' \
+   "${SERVICE_URL}/testsignalgenerator"
+
 ```
 
 ### 4.3 示例 2: 查看账户摘要
@@ -141,7 +146,12 @@ curl -X GET -H "Authorization: Bearer ${TOKEN}" "${SERVICE_URL}/summary"
 在订单成交后，运行此意图来更新系统在 Firestore 中的持仓记录。
 
 ```bash
-curl -X POST -H "Authorization: Bearer ${TOKEN}" "${SERVICE_URL}/trade-reconciliation"
+###curl -X POST -H "Authorization: Bearer ${TOKEN}" "${SERVICE_URL}/trade-reconciliation"
+
+curl -X POST -H "Authorization: Bearer ${TOKEN}" \
+ -H "Content-Type: application/json" \
+ -d '{}' \
+ "${SERVICE_URL}/trade-reconciliation"
 ```
 
 ---

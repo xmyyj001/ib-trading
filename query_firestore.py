@@ -3,15 +3,22 @@ from google.cloud import firestore
 import os
 
 # ===================================================================
-# 全功能 Firestore 查询脚本 (中文版)
+# 全功能 Firestore 查询脚本 (v3 - 明确项目ID)
 # ===================================================================
 
-# 初始化 Firestore 客户端
+if len(sys.argv) < 2:
+    print("错误: 请提供 Google Cloud 项目ID 作为第一个参数。")
+    print("用法: python query_firestore.py YOUR_PROJECT_ID")
+    sys.exit(1)
+
+project_id = sys.argv[1]
+
+# 初始化 Firestore 客户端，并明确指定项目ID
 try:
-    db = firestore.Client()
+    db = firestore.Client(project=project_id)
 except Exception as e:
     print(f"错误：初始化Firestore客户端失败: {e}")
-    print("请确保您已通过gcloud认证 (gcloud auth application-default login) 并设置了项目。")
+    print("请确保您已通过gcloud认证 (gcloud auth application-default login)。")
     sys.exit(1)
 
 def print_doc(doc):
@@ -61,7 +68,7 @@ if __name__ == "__main__":
     trading_mode = os.environ.get('TRADING_MODE', 'paper')
 
     print("===============================================")
-    print(f" Firestore 数据库快照 (模式: {trading_mode})")
+    print(f" Firestore 数据库快照 (项目: {project_id}, 模式: {trading_mode})")
     print("===============================================")
 
     # 1. 查询 config 集合
