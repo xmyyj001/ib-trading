@@ -81,9 +81,9 @@ class TestSignalGenerator(Intent):
         in_flight_quantity = 0
         for trade in open_trades:
             if trade.contract.conId == spy_instrument.contract.conId and trade.order.action == 'BUY':
-                in_flight_quantity += trade.order.remaining()
+                in_flight_quantity += trade.order.remaining
             elif trade.contract.conId == spy_instrument.contract.conId and trade.order.action == 'SELL':
-                in_flight_quantity -= trade.order.remaining()
+                in_flight_quantity -= trade.order.remaining
         self._env.logging.info(f"In-Flight (Pending) SPY Quantity: {in_flight_quantity}")
 
         # 4. Calculate Expected Final Position
