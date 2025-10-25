@@ -1,78 +1,85 @@
 import asyncio
-from google.cloud.firestore_v1.async_transaction import async_transactional
-from google.cloud.firestore_v1 import DELETE_FIELD
-from ib_insync import Contract, util
 from intents.intent import Intent
 import logging
 
-@async_transactional
-async def _update_holdings_and_remove_open_order_async(transaction, holdings_doc_ref, order_doc_ref, contract_id, quantity):
-    """
-    Atomically updates holdings and removes the open order document in a single transaction.
-    """
-    holdings_snapshot = await holdings_doc_ref.get(transaction=transaction)
-    holdings = holdings_snapshot.to_dict() or {}
-    current_position = holdings.get(str(contract_id), 0)
-    new_position = current_position + quantity
-
-    if new_position == 0:
-        transaction.update(holdings_doc_ref, {str(contract_id): DELETE_FIELD})
-    else:
-        transaction.update(holdings_doc_ref, {str(contract_id): new_position})
-    
-    transaction.delete(order_doc_ref)
-    logging.info(f"Transaction: Updated holdings for conId {contract_id} and deleted open order {order_doc_ref.id}.")
-
 class TradeReconciliation(Intent):
+    """
+    An intent that acts as a post-trade auditing and logging tool.
+    It reconciles executed fills from the broker against the trade activities
+    logged by strategies in the 'activity' collection.
+    """
 
-    async def _core(self):
-        """
-        Asynchronously fetches fills and reconciles them against open orders
-        using atomic Firestore transactions.
-        """
-        self._env.logging.info('Running async trade reconciliation...')
-        
-        # Assumes ibgw connection is ready
+    async def _core_async(self):
+        self._env.logging.info('--- Starting Post-Trade Reconciliation (Auditor) ---')
+
+        # 1. Fetch all recent fills from the broker
         fills = await self._env.ibgw.reqFillsAsync()
-        
         if not fills:
             self._env.logging.info('No new fills to reconcile.')
-            return {}
+            return {"status": "No new fills."}
 
-        reconciliation_tasks = [self._reconcile_one_fill(fill) for fill in fills]
-        processed_fills = await asyncio.gather(*reconciliation_tasks)
+        self._env.logging.info(f"Found {len(fills)} fills to process.")
+
+        # 2. Group fills by permId to handle multi-fill orders
+        fills_by_permid = {}
+        for fill in fills:
+            perm_id = str(fill.execution.permId)
+            if perm_id not in fills_by_permid:
+                fills_by_permid[perm_id] = []
+            fills_by_permid[perm_id].append(fill)
+
+        # 3. Process each group of fills against the activity log
+        reconciliation_tasks = [
+            self._reconcile_one_order(perm_id, order_fills)
+            for perm_id, order_fills in fills_by_permid.items()
+        ]
         
-        final_fills = [f for f in processed_fills if f]
-        self._activity_log.update(fills=final_fills)
-        self._env.logging.info(f'Successfully processed {len(final_fills)} fills.')
+        results = await asyncio.gather(*reconciliation_tasks)
+        
+        processed_orders = [res for res in results if res]
+        self._activity_log.update(reconciled_orders=processed_orders)
+        self._env.logging.info(f'Successfully reconciled {len(processed_orders)} orders.')
 
         return self._activity_log
 
-    async def _reconcile_one_fill(self, fill):
+    async def _reconcile_one_order(self, perm_id, fills):
         """
-        Finds the corresponding open order for a single fill and triggers
-        the transactional update.
+        Finds the corresponding activity log for an order and updates it with fill details.
         """
-        contract_id = fill.contract.conId
+        activity_query = self._env.db.collection('activity').where(
+            'orders.permId', '==', perm_id
+        ).limit(1)
         
-        query = self._env.db.collection(f'positions/{self._env.trading_mode}/openOrders').where('permId', '==', fill.execution.permId)
-        docs = [doc async for doc in query.stream()]
+        docs = [doc async for doc in activity_query.stream()]
 
         if not docs:
-            logging.warning(f"Could not find open order for fill with permId {fill.execution.permId}. It might have been reconciled already.")
+            logging.warning(f"Could not find activity log for order with permId {perm_id}. It might be an external order.")
             return None
 
-        order_doc_ref = docs[0].reference
-        order_data = docs[0].to_dict()
-
-        for strategy, quantity_in_order in order_data.get('source', {}).items():
-            holdings_doc_ref = self._env.db.document(f'positions/{self._env.trading_mode}/holdings/{strategy}')
-            
-            try:
-                await _update_holdings_and_remove_open_order_async(self._env.db.transaction(), holdings_doc_ref, order_doc_ref, contract_id, quantity_in_order)
-                logging.info(f"Reconciled fill for strategy {strategy}: {quantity_in_order} of conId {contract_id}")
-            except Exception as e:
-                logging.error(f"Error during transactional update for permId {fill.execution.permId}: {e}", exc_info=True)
-                return None
+        activity_doc_ref = docs[0].reference
+        activity_data = docs[0].to_dict()
         
-        return fill.execution.nonDefaults()
+        # Consolidate fill information
+        total_filled_qty = sum(f.execution.shares for f in fills)
+        avg_fill_price = sum(f.execution.shares * f.execution.price for f in fills) / total_filled_qty
+        
+        # Find the specific order in the activity log's orders list
+        order_to_update = next((o for o in activity_data.get('orders', []) if o.get('permId') == perm_id), None)
+
+        if not order_to_update:
+             logging.error(f"Found activity {activity_doc_ref.id} for permId {perm_id}, but couldn't find the matching order entry inside it.")
+             return None
+
+        # Update the status and add execution details
+        order_to_update['status'] = 'Filled'
+        order_to_update['avgFillPrice'] = avg_fill_price
+        order_to_update['filledQuantity'] = total_filled_qty
+        order_to_update['lastUpdateTime'] = datetime.utcnow().isoformat()
+
+        try:
+            await activity_doc_ref.update({'orders': activity_data['orders']})
+            logging.info(f"Successfully updated activity {activity_doc_ref.id} for order {perm_id} to Filled.")
+            return perm_id
+        except Exception as e:
+            logging.error(f"Failed to update activity log for permId {perm_id}: {e}", exc_info=True)
+            return None
