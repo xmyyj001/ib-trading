@@ -69,3 +69,31 @@
 gcloud scheduler jobs describe high-frequency-test-runner --location=asia-east1
 ## show cloud monitoring:
 gcloud alpha monitoring policies list
+
+
+
+针对trade_reconciliation的每日对帐，设计了如下的 Cloud Scheduler  任务。这个任务将在您策略运行窗口结束后的5分钟执行，既确保了策略有足够的时间完成，也为网络延迟等留出了缓冲。
+
+  这是一个 `gcloud` 命令，您可以直接在 Cloud Shell 中执行它来创建这个新的调度任务：
+gcloud scheduler jobs create http daily-reconciliation-job \
+     --schedule="5 16 * * 1-5" \
+     --time-zone="America/New_York" \
+     --uri="${SERVICE_URL}/trade-reconciliation" \
+     --http-method=POST \
+     --headers="Content-Type=application/json" \
+     --message-body="{}" \
+     --oidc-service-account-email="ib-trading@gold-gearbox-424413-k1.iam.gserviceaccount.com" \
+     --oidc-token-audience="${SERVICE_URL}" \
+     --description="Daily portfolio reconciliation, runs after the last strategy execution." \
+     --location=asia-east1
+
+  设定详解
+
+   * `--schedule="5 16 * * 1-5"`: 这是核心。
+       * 5: 在每小时的第5分钟执行。
+       * 16: 在纽约时间下午16点（即4 PM）执行。
+       * 这比您策略的最后一次运行时间（15:00）晚了一个多小时，比收盘时间（通常是16:00）晚了5分钟，是一个非常安全和稳健的对账时间点。
+   * `--time-zone="America/New_York"`: 确保了调度严格按照您交易市场的时区执行。
+   * `--uri="${SERVICE_URL}/trade-reconciliation"`: 准确地指向我们新重构的对账意图。
+   * `--message-body="{}"`: 发送一个空的JSON对象，以满足我们API的要求。
+   * `--oidc-service-account-email` 和 `--oidc-token-audience`: 使用与您现有任务完全相同的、正确的认证配置。
