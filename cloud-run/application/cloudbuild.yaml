@@ -62,7 +62,7 @@ steps:
     - -c
     - |
       set -e
-      pip install --quiet google-cloud-firestore
+      pip install --quiet google-cloud-firestore packaging
       python cloud-run/application/app/lib/init_firestore.py "${PROJECT_ID}"
     waitFor: ['Push-Application']
 
