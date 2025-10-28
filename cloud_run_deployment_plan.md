@@ -162,12 +162,12 @@ gcloud run services update ${CLOUD_RUN_SERVICE_NAME} --region ${GCP_REGION} \
     ```
     如果看到返回的账户信息，则代表系统已成功连接并登录 IB Gateway。
 
-3.  **测试 `/allocation` 意图 (spymacdvixy策略)**
-    *   **说明**: 模拟一次策略执行，`dryRun: true` 参数确保它只进行计算而不真正下单。
+3.  **测试 `/testsignalgenerator` 意图**
+    *   **说明**: 这是当前部署在 Cloud Run 上的验证策略。加入 `dryRun: true` 可避免真实下单，仅用于验证信号。
     ```bash
     curl -X POST -H "Content-Type: application/json" -H "Authorization: Bearer ${TOKEN}" \
-    -d '{"dryRun": true, "strategies": ["spymacdvixy"]}' \
-    "${SERVICE_URL}/allocation"
+      -d '{"dryRun": true}' \
+      "${SERVICE_URL}/testsignalgenerator"
     ```
 
 ### 步骤 10: 解决403禁止访问错误
@@ -207,11 +207,13 @@ gcloud run services add-iam-policy-binding ${CLOUD_RUN_SERVICE_NAME} \
 
 #### `trade-reconciliation`
 
-*   **目的**: 检查近期的成交（Fills），并更新系统内部的挂单和持仓状态。
-*   **方法**: `GET`
+*   **目的**: 写入最新的持仓快照。成交审计逻辑仍在调试阶段，如遇异常可忽略。
+*   **方法**: `POST`
 *   **命令**:
     ```bash
-    curl -H "Authorization: Bearer ${TOKEN}" "${SERVICE_URL}/trade-reconciliation"
+    curl -X POST -H "Authorization: Bearer ${TOKEN}" -H "Content-Type: application/json" \
+      -d '{}' \
+      "${SERVICE_URL}/trade-reconciliation"
     ```
 
 #### `cash-balancer`
@@ -228,59 +230,55 @@ gcloud run services add-iam-policy-binding ${CLOUD_RUN_SERVICE_NAME} \
 
 ### 附录 B: 生产场景的 Cloud Scheduler 配置
 
-*   **目的**: 创建云端的定时任务（Cron Job），以实现交易场景的完全自动化，无需人工触发。
+*   **目的**: 创建云端的定时任务（Cron Job），以便自动触发当前已经部署的验证策略。
 
-#### 场景 A: 日线级别的“波段/趋势交易者”
+#### 验证策略：`testsignalgenerator`
 
-*   **说明**: 此命令创建一个名为 `eod-allocation-job` 的定时任务，它会在美东时间每个交易日下午4:15，安全地调用 `/allocation` 端点。
+*   **说明**: 以下命令创建一个名为 `nightly-test-signal` 的作业，在美东时间每个交易日下午4:15 触发一次 `dryRun` 请求，用于验证策略信号而不真实下单。
 
 ```bash
-gcloud scheduler jobs create http eod-allocation-job --project=${PROJECT_ID} \
+gcloud scheduler jobs create http nightly-test-signal --project=${PROJECT_ID} \
     --location=${GCP_REGION} \
     --schedule="15 16 * * 1-5" \
     --time-zone="America/New_York" \
-    --uri="${SERVICE_URL}/allocation" \
+    --uri="${SERVICE_URL}/testsignalgenerator" \
     --http-method=POST \
     --oidc-service-account-email="${SERVICE_ACCOUNT_EMAIL}" \
-    --message-body='{"strategies": ["spymacdvixy"]}' \
+    --message-body='{"dryRun": true}' \
     --headers="Content-Type=application/json"
 ```
 
-#### 场景 D: “混合模式”日内交易者
+### 附录 C: 后续部署计划
 
-*   **说明**: 此场景需要创建三个独立的定时任务，分别负责开盘、盘中和收盘的自动化调用。
+1. **`allocation` / `spymacdvixy`**: 等待策略代码完成异步化与 Cloud Run 适配后，再补充真实的 `curl` 示例与 Scheduler 配置。
+2. **`trade-reconciliation`**: 完成 Firestore 异步调用改造后，恢复 GET/POST 的审计说明，并补充观察日志或指标的步骤。
+3. **额外管理意图**: 若新增 `/risk-check`、`/eod-check` 等端点，需同步更新本文档的测试与调度章节，避免出现找不到路径的命令。
 
-**1. 作业一: 开盘交易 (`open-allocation-job`)**
-*   **说明**: 在美东时间每个交易日上午9:30，调用 `/allocation` 端点执行开盘交易。
-```bash
-gcloud scheduler jobs create http open-allocation-job --project=${PROJECT_ID} \
-    --schedule="30 9 * * 1-5" \
-    --time-zone="America/New_York" \
-    --uri="${SERVICE_URL}/allocation" \
-    --http-method=POST \
-    --oidc-service-account-email="${SERVICE_ACCOUNT_EMAIL}" \
-    --message-body='{"strategies": ["spymacdvixy"]}' \
-    --headers="Content-Type=application/json"
-```
+#### 场景 D（预研）：混合策略的自动化编排
 
-**2. 作业二: 盘中风控 (`midday-risk-check-job`)**
-*   **说明**: 在美东时间每个交易日下午1:00，调用 `/risk-check` 端点进行盘中风险检查。
-```bash
-gcloud scheduler jobs create http midday-risk-check-job --project=${PROJECT_ID} \
-    --schedule="0 13 * * 1-5" \
-    --time-zone="America/New_York" \
-    --uri="${SERVICE_URL}/risk-check" \
-    --http-method=POST \
-    --oidc-service-account-email="${SERVICE_ACCOUNT_EMAIL}"
-```
+> 该场景针对未来在 Cloud Run 上并行运行多条策略的需求，当前仅作为计划保存，待相关意图上线后执行。
 
-**3. 作业三: 收盘对账 (`eod-reconciliation-job`)**
-*   **说明**: 在美东时间每个交易日下午3:55，调用 `/eod-check` 端点进行日终对账和清算检查。
-```bash
-gcloud scheduler jobs create http eod-reconciliation-job --project=${PROJECT_ID} \
-    --schedule="55 15 * * 1-5" \
-    --time-zone="America/New_York" \
-    --uri="${SERVICE_URL}/eod-check" \
-    --http-method=POST \
-    --oidc-service-account-email="${SERVICE_ACCOUNT_EMAIL}"
-```
+*   **策略目标**: 组合使用盘前/盘中/收盘的不同意图，例如开盘执行 `allocation`、午间执行 `risk-check`、收盘执行 `trade-reconciliation` 与 `close-all`。
+*   **建议调度**:
+    *   **开盘交易 (`open-allocation-job`)**  
+        `schedule="30 9 * * 1-5"`（美东时间 09:30）调用 `/allocation`，请求体携带需要运行的策略列表。
+    *   **盘中风控 (`midday-risk-check-job`)**  
+        `schedule="0 13 * * 1-5"` 调用 `/risk-check` 或其它风控意图，用于监控单日风险。
+    *   **收盘对账 (`eod-reconciliation-job`)**  
+        `schedule="55 15 * * 1-5"` 依次触发 `/trade-reconciliation`、必要时触发 `/close-all`，确保隔夜前状态一致。
+*   **待办事项**:
+    *   实现或恢复上述意图的 API，并在 `main.py` 中注册。
+    *   为每个作业准备独立的 `dryRun` 参数，便于先行演练。
+    *   在部署前更新本文档的命令示例，确保 `curl` 路径与请求体准确。
+
+#### 已知缺陷与修复计划
+
+| 模块 | 问题描述 | 修复思路 |
+| --- | --- | --- |
+| `cloud-run/application/app/intents/collect_market_data.py:9-21` | `CollectMarketData` 未接受 `env` 参数且覆盖了基类 `run`，调用时会抛出 `TypeError` 并绕过异步执行模型。 | 改为 `__init__(self, env, **kwargs)` 并实现 `_core_async`，保留同步占位逻辑在后台线程运行。 |
+| `cloud-run/application/app/intents/reconcile.py:17-29` | Firestore 客户端为同步接口，却使用 `await doc.reference.delete()` / `await recon_doc_ref.set(...)`，运行即报 `TypeError: object NoneType can't be used in 'await`。 | 去掉 `await` 或切换到异步 Firestore SDK，并为批量删除使用事务。 |
+| `cloud-run/application/app/intents/trade_reconciliation.py:65-100` | `datetime` 未导入，且 `activity_query.stream()` 为同步生成器，被 `async for` 消费会报错；`await activity_doc_ref.update()` 同样不可用。 | 引入 `from datetime import datetime`，改用同步迭代或异步 Firestore 客户端，确保审计流程可执行。 |
+| `cloud-run/application/app/intents/close_all.py:63-64,78-93` | 调用不存在的 `placeOrderAsync`，并对同步 Firestore `DocumentReference.get()` 进行了 `await`。目前进程执行到此必然失败。 | 使用 `ibgw.placeOrder`（同步）或自建异步封装，改为 `doc_ref.get()` 同步调用后再处理。 |
+| `cloud-run/application/app/intents/cash_balancer.py:53-54` | 同样依赖不存在的 `placeOrderAsync`，导致实盘下单路径不可达。 | 复用 `ibgw.placeOrder`，并在后台线程内等待状态更新。 |
+| `cloud-run/application/app/intents/allocation.py:15-74` | 未传入 `env`（`super().__init__` 缺参）、核心函数仍命名为 `_core` 而非 `_core_async`，`Trade` 初始化缺少 `env`。代码当前无法被 Cloud Run 调用。 | 补齐构造函数签名，升级为异步实现，并在 `Trade` 创建时传入 `self._env`。 |
+| `cloud-run/application/app/lib/trading.py:36-43` | `Stock/Forex/Future/Option` 的 `IB_CLS` 指向自身，导致无法实例化 ib_insync 合约；类中也缺失 `InstrumentSet`、同步 `get_contract_details` 等被策略依赖的工具。 | 将 `IB_CLS` 指向 `ib_insync.Stock` 等原始类，恢复缺失的工具类与同步方法，使旧策略可继续使用。 |

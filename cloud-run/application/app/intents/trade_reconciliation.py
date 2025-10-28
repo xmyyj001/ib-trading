@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime
 from intents.intent import Intent
 import logging
 
@@ -65,11 +66,13 @@ class TradeReconciliation(Intent):
     async def _reconcile_one_order(self, perm_id, fills):
         """Finds the corresponding activity log for an order and updates it with fill details."""
         # This sub-function remains the same as it correctly handles the audit part.
-        activity_query = self._env.db.collection('activity').where(
-            'orders.permId', '==', perm_id
-        ).limit(1)
-        
-        docs = [doc async for doc in activity_query.stream()]
+        activity_query = (
+            self._env.db.collection('activity')
+            .where('orders.permId', '==', perm_id)
+            .limit(1)
+        )
+
+        docs = list(activity_query.stream())
 
         if not docs:
             logging.warning(f"Audit: Could not find activity log for order with permId {perm_id}.")
@@ -93,8 +96,10 @@ class TradeReconciliation(Intent):
         order_to_update['lastUpdateTime'] = datetime.utcnow().isoformat()
 
         try:
-            await activity_doc_ref.update({'orders': activity_data['orders']})
-            logging.info(f"Audit success: Updated activity {activity_doc_ref.id} for order {perm_id}.")
+            activity_doc_ref.update({'orders': activity_data['orders']})
+            logging.info(
+                f"Audit success: Updated activity {activity_doc_ref.id} for order {perm_id}."
+            )
             return perm_id
         except Exception as e:
             logging.error(f"Audit fail: Could not update activity log for permId {perm_id}: {e}", exc_info=True)

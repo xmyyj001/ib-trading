@@ -16,6 +16,26 @@
 
 ---
 
+### 1.1 仓库结构速览
+
+```
+.
+├── cloud-run/                 # Cloud Run 服务代码与容器镜像
+│   ├── application/           # FastAPI 应用、Dockerfile 与 Cloud Build 配置
+│   │   └── app/
+│   │       ├── intents/       # Web API 意图（summary、trade_reconciliation、testsignalgenerator 等）
+│   │       ├── strategies/    # 交易策略实现与实验代码
+│   │       └── lib/           # 与 IB、GCP 交互的基础模块
+│   └── base/                  # IB Gateway + IBC 的基础镜像与启动脚本
+├── gke/                       # 早期 GKE 部署方案（YAML、脚本）
+├── *.md / *.py                # 调试记录、方案文档、诊断脚本与集成测试工具
+└── deployment_vars.sh         # 部署所需的环境变量模板
+```
+
+Cloud Run 版本目前是主线实现；`gke/` 目录保留历史方案与备用配置。根目录下的 Python 脚本（如 `verify_trading.py`, `connect_test.py`）用于本地验证连接、回放日志或手工排障。
+
+---
+
 ## 2. 核心设计原则 (截至 2025-10-25 的版本)
 
 经过多轮的实盘调试与迭代，本系统当前遵循以下核心设计原则，这对于理解系统的行为至关重要：
@@ -28,22 +48,29 @@
     2.  **在途订单 (`ib.openTrades()`)**: 用于防止在市场波动或并发执行时下达重复订单。
 *   **执行**: 策略意图在完成所有计算和保证金检查后，直接执行下单操作 (`placeOrder`)。
 
-### 2.2 `trade_reconciliation` 是事后审计工具
+### 2.2 `trade_reconciliation` 仍在完善中
 
-*   **职责**: `trade_reconciliation` 意图的功能是作为**事后账本**和**审计工具**。
-*   **工作模式**: 它在交易发生后运行，获取真实的**成交记录 (Fills)**，并用这些记录去更新 Firestore `activity` 集合中对应订单的状态（例如，从 `Submitted` 更新为 `Filled`）。
-*   **关键点**: 此意图**不参与**任何交易决策，也不应被任何交易决策逻辑所依赖。
+*   **现状**: 当前代码仅实现了**实时持仓快照**写入 Firestore (`positions/{mode}/holdings/all_positions`)。对成交记录的审计流程还在调试阶段，尚未稳定。
+*   **风险提示**: 在 Google Cloud Run 中运行该意图时，会因为 Firestore 异步 API 的兼容性问题抛出异常；因此暂不建议在生产环境中依赖它更新订单状态。
+*   **后续规划**: 完成异步 Firestore 客户端的接入后，再恢复对 `activity` 集合的更新与审计。
 
 ### 2.3 Firestore 的定位
 
 *   **`config` 集合**: 作为系统的静态配置中心，存储交易开关、风险参数等。
-*   **`activity` 集合**: 作为所有交易行为的**事件日志 (Event Log)**。策略在下单时记录“意图”，`trade_reconciliation` 在成交后更新“结果”。
-*   **`positions/holdings` 集合 (已废弃)**: 在当前的设计模式下，此集合**不应被用于交易决策**。试图在 Firestore 中维护一个实时的仓位副本被证明是复杂且有风险的。系统的“唯一真实持仓来源”是直接来自 IB 的 `portfolio` 数据。
+*   **`activity` 集合**: 作为所有交易行为的**事件日志 (Event Log)**。目前只有部分意图（例如 `test_signal_generator`）会写入订单信息；审计流程仍在回归测试中。
+*   **`positions/holdings` 集合**: 依然被 `Strategy`、`CloseAll` 等逻辑读取，以便计算虚拟持仓与针对性平仓。虽然真实持仓以 IB 为准，但 Firestore 持仓文档仍扮演辅助角色，属于历史设计遗留，更新策略需谨慎。
 
 ### 2.4 已知风险与未来演进
 
 *   **风险**: 当前“策略即意图”模式的一个已知风险是，**系统无法自动感知并响应在IB TWS或手机端等外部进行的手动仓位调整**。因为策略的决策起点是其自身的逻辑，如果外部操作改变了仓位，策略可能会在下一次运行时“纠正”这个变化，从而与交易员的意图相悖。
 *   **演进方向**: 未来的一个可选演进方向是“**对账先行**”模式。即在每次决策前，强制先运行一个对账任务，将IB的真实仓位写入 Firestore，然后所有策略都基于这个 Firestore 的“快照”进行计算。这可以解决外部仓位变化的同步问题，但会增加系统的复杂性。当前版本为了保持简洁和稳定，暂未采用此模式。
+
+### 2.5 待办修订计划
+
+*   **恢复 `trade_reconciliation` 审计**: 引入异步 Firestore 客户端或改造当前逻辑，确保在 Cloud Run 中可以安全更新 `activity` 集合。
+*   **整理 Firestore `holdings` 使用方式**: 评估哪些策略仍需引用仓位快照，决定是继续维护文档还是迁移到纯 IB 数据流。
+*   **重新启用 `allocation` 架构**: 在完成异步重构与依赖清理后，再次验证“总指挥”模式，并补全缺失的 API 端点。
+*   **策略扩展**: 将 `spy_macd_vixy` 等策略升级到“策略即意图”范式，补齐端到端测试后再部署。
 
 ---
 
@@ -91,14 +118,19 @@ graph TD
 
 ### 3.1 核心意图 (Intents)
 
-*   **策略类意图**:
-    *   `testsignalgenerator`: 一个高频策略范例。它会获取 SPY 的 30 分钟 K 线，计算 MACD 指标，并根据信号直接下达限价单。
-    *   *您可以仿照它创建自己的策略意图。*
-*   **管理类意图**:
-    *   `summary`: 获取账户摘要，包括净值、持仓、未结订单等。
-    *   `trade_reconciliation`: **（关键维护意图）** 用于核对系统在 Firestore 中的记录与券商的真实成交记录，并同步持仓状态。
-    *   `close_all`: 平掉所有现有头寸并取消所有挂单。
-    *   `cash_balancer`: 调整账户中的现金余额。
+**已部署 / 可调用**
+*   `testsignalgenerator`: 当前唯一部署到 Cloud Run 的策略意图。它获取 SPY 的 30 分钟 K 线，计算 MACD 指标，并根据信号直接下达限价单。
+*   `summary`: 获取账户摘要，包括净值、持仓、未结订单等。
+*   `close_all`: 平掉所有现有头寸并取消所有挂单。
+*   `cash_balancer`: 调整账户中的现金余额。
+
+**运行中但待完善**
+*   `trade_reconciliation`: 仍在调试，暂时只可靠地写入持仓快照，成交审计需待修复。
+
+**计划中的意图**
+*   `allocation`: 待异步化与策略依赖完成后，恢复在 Cloud Run 上的“总指挥”角色。
+*   `risk-check` / `eod-check` 等风控意图：处于设计阶段，未来用于配合 Scheduler 场景执行。
+*   其他策略文件（如 `spymacdvixy`, `dummy` 等）仍在本地开发，待迁移到“策略即意图”范式后部署。
 
 ### 3.2 如何添加新策略（意图）
 
@@ -181,5 +213,5 @@ graph TD
 ```
 
 *   **`config` 集合**: 存储应用的通用配置和分环境配置。
-*   **`positions/{trading_mode}/openOrders`**: **待办事项**。由策略意图在下单后创建，记录了所有已提交但未确认成交的订单。
-*   **`positions/{trading_mode}/holdings`**: **官方持仓**。此处的记录**只应由 `trade_reconciliation` 意图在确认券商的成交回报后进行更新**。每个文档的 ID 是策略的 ID。
+*   **`positions/{trading_mode}/openOrders`**: 尚未上线。当前代码不会写入该集合，后续如需启用需要补充相应的意图逻辑。
+*   **`positions/{trading_mode}/holdings`**: 存储每个策略的历史持仓快照。`Strategy` 基类、`close_all` 与 `reconcile` 会读取它来辅助计算目标仓位；`trade_reconciliation` 目前仅维护 `holdings/all_positions` 总表。
