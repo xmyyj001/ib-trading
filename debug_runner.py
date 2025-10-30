@@ -19,7 +19,7 @@ async def run_e2e_test():
     # 确保容器内的环境变量已设置 (通常在 docker run 时通过 -e 传入)
     # 如果没有，可以在这里手动设置用于调试
     os.environ.setdefault('TRADING_MODE', 'paper')
-    os.environ.setdefault('TWS_VERSION', '1030')
+    os.environ.setdefault('TWS_VERSION', '1037')
     # ... 其他需要的环境变量 ...
 
     env = Environment()

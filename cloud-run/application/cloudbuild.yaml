@@ -95,7 +95,7 @@ steps:
       - '${_SERVICE_ACCOUNT}'
       - '--no-allow-unauthenticated'
       - '--set-env-vars'
-      - 'PROJECT_ID=${PROJECT_ID},TRADING_MODE=${_TRADING_MODE},GCLOUD_REGION=${_REGION},TWS_VERSION=1030'
+      - 'PROJECT_ID=${PROJECT_ID},TRADING_MODE=${_TRADING_MODE},GCLOUD_REGION=${_REGION},TWS_VERSION=${_TWS_VERSION}'
       - '--set-secrets'
       - 'IB_USERNAME=${_SECRET_NAME}:latest#userid,IB_PASSWORD=${_SECRET_NAME}:latest#password'
     waitFor:
@@ -112,5 +112,6 @@ substitutions:
   _APPLICATION_IMAGE: 'us-central1-docker.pkg.dev/${PROJECT_ID}/ib-trading-app/application'
   _IMAGE_TAG: 'latest'
   _SECRET_NAME: 'ib-paper-credentials'
+  _TWS_VERSION: '1037'
 
 timeout: '1800s'

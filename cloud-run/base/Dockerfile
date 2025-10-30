@@ -6,6 +6,7 @@ FROM python:3.9-slim
 # --- 1. 定义所有环境变量 ---
 # 关键：TWS_PATH 设置为经过验证的、真正的顶层安装路径
 ENV TWS_PATH=/root/Jts
+ENV TWS_VERSION=1037
 ENV IBC_PATH=/opt/ibc
 ENV DISPLAY=:0
 
@@ -21,10 +22,10 @@ RUN apt-get update && \
 RUN wget -O /tmp/ibgw.sh https://download2.interactivebrokers.com/installers/ibgateway/stable-standalone/ibgateway-stable-standalone-linux-x64.sh && \
     chmod +x /tmp/ibgw.sh && \
     # 使用自动应答来完成控制台安装
-    (echo ""; echo "1"; echo ""; echo "") | /tmp/ibgw.sh -c && \
+    (echo ""; echo "1"; echo ""; echo "n") | /tmp/ibgw.sh -c && \
     rm -f /tmp/ibgw.sh && \
     # 验证安装是否成功
-    test -d "${TWS_PATH}/ibgateway/1030/jars" || (echo "FATAL: IB Gateway installation failed!" && exit 1)
+    test -d "${TWS_PATH}/ibgateway/${TWS_VERSION}/jars" || (echo "FATAL: IB Gateway installation failed!" && exit 1)
 
 # --- 4. 下载并正确解压 IBC v3.22.0 ---
 RUN mkdir -p "${IBC_PATH}" && \
