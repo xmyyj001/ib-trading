@@ -35,14 +35,11 @@ def load_portfolio_snapshot(client: firestore.Client, trading_mode: str) -> Dict
     mode_doc = client.collection("positions").document(trading_mode).get()
     if mode_doc.exists:
         data = mode_doc.to_dict() or {}
-        if "latest_portfolio" in data:
-            embedded = data["latest_portfolio"] or {}
-            if isinstance(embedded, dict):
-                return embedded
+        embedded = data.get("latest_portfolio")
+        if isinstance(embedded, dict):
+            return embedded
 
-    raise RuntimeError(
-        f"Portfolio snapshot not found; tried '{portfolio_path}' and embedded field on positions/{trading_mode}."
-    )
+    return {}
 
 
 def load_intent_snapshot(client: firestore.Client, strategy_id: str) -> Optional[Dict]:
@@ -99,7 +96,8 @@ def dump_human_readable(summary: Dict, verbose_intents: bool) -> None:
     print("\n=== Commander Exposure Summary ===")
     print(f"Project ID        : {summary['project_id']}")
     print(f"Trading Mode      : {summary['trading_mode']}")
-    print(f"Snapshot Updated  : {summary['portfolio_updated_at']}")
+    snapshot_status = "present" if summary["portfolio_snapshot_found"] else "missing"
+    print(f"Snapshot Updated  : {summary['portfolio_updated_at']} ({snapshot_status})")
     print(f"Net Liquidation   : {format_currency(summary['net_liquidation'])}")
     print(f"Overall Exposure  : {summary['overall_exposure_pct'] * 100:.2f}%")
 
@@ -166,6 +164,7 @@ def main(argv: List[str]) -> int:
         "net_liquidation": float(portfolio.get("net_liquidation", 0.0)),
         "overall_exposure_pct": float(exposure_cfg.get("overall", 0.0)),
         "strategies": strategies_summary,
+        "portfolio_snapshot_found": bool(portfolio),
     }
 
     if args.json:
