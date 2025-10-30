@@ -1,23 +1,23 @@
 # cloud-run/base/cloudbuild.yaml
+# Builds the IB Gateway base image and pushes it to Artifact Registry.
+
 steps:
-# 步骤 1: 将您 Cloud Shell 中的本地依赖，复制到 Cloud Build 的工作空间中
-- name: 'gcr.io/cloud-builders/gsutil'
-  args: ['-m', 'cp', '-r', '/home/xmyyj001/local_deps', '.']
-  # 注意：这里的 /home/xmyyj001 需要与您的 Cloud Shell 用户主目录匹配
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'Build-Base'
+    args:
+      - 'build'
+      - '--tag'
+      - '${_BASE_IMAGE}'
+      - '.'
+    dir: 'cloud-run/base'
 
-# 步骤 2: 构建 base 镜像
-- name: 'gcr.io/cloud-builders/docker'
-  args:
-    - 'build'
-    - '--tag'
-    - 'europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/base:latest'
-    - '.' # 使用当前目录 (cloud-run/base) 作为构建上下文
-  dir: 'cloud-run/base' # 指定 Dockerfile 所在的目录
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'Push-Base'
+    args: ['push', '${_BASE_IMAGE}']
+    waitFor: ['Build-Base']
 
-# 步骤 3: 推送 base 镜像
-- name: 'gcr.io/cloud-builders/docker'
-  args: ['push', 'europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/base:latest']
+images:
+  - '${_BASE_IMAGE}'
 
-# 镜像构建完成后，清理掉复制过来的依赖文件，保持工作区干净
-- name: 'ubuntu'
-  args: ['rm', '-rf', 'local_deps']
+substitutions:
+  _BASE_IMAGE: 'us-central1-docker.pkg.dev/${PROJECT_ID}/ib-trading-app/base:latest'

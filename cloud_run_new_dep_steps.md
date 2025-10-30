@@ -75,6 +75,14 @@
      --format="value(bindings.role)"
    ```
    *缺失角色时，使用 `gcloud projects add-iam-policy-binding` 附加权限。*
+6. **构建并推送 Base 镜像**（首次迁移到新地区时必须执行）  
+   ```bash
+   gcloud builds submit \
+     --region=${CLOUD_BUILD_REGION} \
+     --config cloud-run/base/cloudbuild.yaml \
+     --substitutions=_BASE_IMAGE=${BASE_IMAGE_URL}
+   ```
+   *成功后，`${BASE_IMAGE_URL}` 会在新仓库中可用，后续应用镜像构建才能顺利拉取。*
 
 ## 5. 构建并上传应用镜像
 
