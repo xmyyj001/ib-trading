@@ -22,10 +22,27 @@ def load_common_config(client: firestore.Client) -> Dict:
 
 
 def load_portfolio_snapshot(client: firestore.Client, trading_mode: str) -> Dict:
-    doc = client.document(f"positions/{trading_mode}/latest_portfolio").get()
-    if not doc.exists:
-        raise RuntimeError(f"positions/{trading_mode}/latest_portfolio document not found.")
-    return doc.to_dict() or {}
+    # Preferred shape: document at positions/{mode}/latest_portfolio
+    portfolio_path = f"positions/{trading_mode}/latest_portfolio"
+    try:
+        doc = client.document(portfolio_path).get()
+    except ValueError:
+        doc = None
+    if doc and doc.exists:
+        return doc.to_dict() or {}
+
+    # Legacy shape: positions/{mode} document with embedded snapshot
+    mode_doc = client.collection("positions").document(trading_mode).get()
+    if mode_doc.exists:
+        data = mode_doc.to_dict() or {}
+        if "latest_portfolio" in data:
+            embedded = data["latest_portfolio"] or {}
+            if isinstance(embedded, dict):
+                return embedded
+
+    raise RuntimeError(
+        f"Portfolio snapshot not found; tried '{portfolio_path}' and embedded field on positions/{trading_mode}."
+    )
 
 
 def load_intent_snapshot(client: firestore.Client, strategy_id: str) -> Optional[Dict]:
