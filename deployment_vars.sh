@@ -15,14 +15,21 @@
 export PROJECT_ID="gold-gearbox-424413-k1"
 
 # The GCP region for your services (e.g., asia-east1, us-central1)
-export GCP_REGION="asia-east1"
+# export GCP_REGION="asia-east1"
+export GCP_REGION="us-central1"
+
+# Cloud Build region (保持与 Cloud Run 相同地区，避免跨区域构建)
+export CLOUD_BUILD_REGION="${GCP_REGION}"
 
 # The email account you use to log into GCP, for granting invoke permissions
 export USER_EMAIL_ACCOUNT="xmyyj001@gmail.com"
 
 # --- Service & Repo Naming ---
 # The name for the Artifact Registry repository
-export REPO_NAME="cloud-run-repo"
+# export REPO_NAME="cloud-run-repo"
+
+# Full Artifact Registry path (新仓库名称与服务基名对齐，避免复用旧仓库)
+export IMAGE_REPO="${GCP_REGION}-docker.pkg.dev/${PROJECT_ID}/${SERVICE_NAME_BASE}-app"
 
 # The name for the Cloud Run service (and other related resources)
 export SERVICE_NAME_BASE="ib-trading"
@@ -42,8 +49,8 @@ export IB_PASSWORD="[REPLACE_WITH_YOUR_IB_PASSWORD]"
 
 
 # --- Derived Variables (usually no need to change these) ---
-# Full Artifact Registry path
-export DOCKER_REPO_URL="${GCP_REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}"
+# Full Artifact Registry path（旧变量保留注释避免误用）
+# export DOCKER_REPO_URL="${GCP_REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}"
 
 # Full Service Account email address
 export SERVICE_ACCOUNT_EMAIL="${SERVICE_NAME_BASE}@${PROJECT_ID}.iam.gserviceaccount.com"
