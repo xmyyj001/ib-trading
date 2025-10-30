@@ -1,3 +1,5 @@
+setuptools
+importlib-metadata
 numpy<2.0
 dateparser==1.1.0
 fastapi

@@ -22,6 +22,7 @@ from intents.intent import Intent
 from intents.summary import Summary
 from intents.trade_reconciliation import TradeReconciliation
 from intents.reconcile import Reconcile
+from intents.orchestrator import Orchestrator
 from strategies.test_signal_generator import TestSignalGenerator
 from lib.environment import Environment
 
@@ -109,7 +110,8 @@ INTENTS = {
     'summary': Summary,
     'trade-reconciliation': TradeReconciliation,
     'reconcile': Reconcile,
-    'testsignalgenerator': TestSignalGenerator
+    'testsignalgenerator': TestSignalGenerator,
+    'orchestrator': Orchestrator
 }
 
 @app.get("/{intent}")

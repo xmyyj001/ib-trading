@@ -1,20 +1,28 @@
 from datetime import date
-from google.cloud.bigquery.job import LoadJobConfig, WriteDisposition
-from google.cloud.firestore_v1 import DELETE_FIELD
 from os import environ, listdir
-from pandas import DataFrame
 import re
 from time import sleep
 import unittest
 from unittest.mock import patch
 from uuid import uuid1
 
+RUN_REMOTE = environ.get('K_REVISION') not in (None, 'localhost')
+
+if RUN_REMOTE:
+    from google.cloud.bigquery.job import LoadJobConfig, WriteDisposition
+    from google.cloud.firestore_v1 import DELETE_FIELD
+    from pandas import DataFrame
+else:
+    LoadJobConfig = WriteDisposition = DELETE_FIELD = None
+    DataFrame = None
+
 # 在模块级别初始化 ibc_config 和 env_vars，以便在测试用例中可能需要时访问
 ibc_config = None
 env_vars = None # 重命名 env 以避免与 Python 内置的 env 冲突
+Environment = None
 
 # 这个 if 块只在非本地（即 Cloud Build/Cloud Run）环境中执行
-if environ.get('K_REVISION') != 'localhost':
+if RUN_REMOTE:
     # 尝试导入 Environment，如果失败则打印警告，因为后续依赖它的测试会跳过
     try:
         from lib.environment import Environment
@@ -114,101 +122,106 @@ except ImportError:
     Intent = None
     print("Warning: Failed to import 'intents.intent.Intent'. IB GW related tests might be skipped.")
 
-try:
-    from lib.gcp import GcpModule
-except ImportError:
+if RUN_REMOTE:
+    try:
+        from lib.gcp import GcpModule
+    except ImportError:
+        GcpModule = None
+        print("Warning: Failed to import 'lib.gcp.GcpModule'. GCP related tests might be skipped.")
+else:
     GcpModule = None
-    print("Warning: Failed to import 'lib.gcp.GcpModule'. GCP related tests might be skipped.")
+    print("Skipping GCP integration tests - RUN_REMOTE flag not enabled.")
 
 
-@unittest.skipIf(GcpModule is None, "Skipping GCP tests because GcpModule could not be imported.")
-class TestGcpModule(unittest.TestCase):
+if RUN_REMOTE and GcpModule is not None:
 
-    BIGQUERY_DESTINATION = 'historical_data.test'
-    BIGQUERY_JOB_CONFIG = LoadJobConfig(write_disposition=WriteDisposition.WRITE_APPEND)
-    FIRESTORE_COLLECTION = 'tests'
+    class TestGcpModule(unittest.TestCase):
 
-    @classmethod
-    def setUpClass(cls):
-        # 确保 GcpModule 在类级别可用
-        if GcpModule is None:
-            raise unittest.SkipTest("GcpModule not available.")
-        cls.gcp_module_instance = GcpModule() # 创建一个类级别的实例
+        BIGQUERY_DESTINATION = 'historical_data.test'
+        BIGQUERY_JOB_CONFIG = LoadJobConfig(write_disposition=WriteDisposition.WRITE_APPEND)
+        FIRESTORE_COLLECTION = 'tests'
 
-    def setUp(self):
-        # 使用类级别实例，或者按需在每个测试中创建新实例
-        self.gcp_module = self.gcp_module_instance
-        # 或者 self.gcp_module = GcpModule() 如果希望每个测试有独立实例
+        @classmethod
+        def setUpClass(cls):
+            cls.gcp_module_instance = GcpModule() # 创建一个类级别的实例
 
-    def test_bigquery(self):
-        dt = date(1977, 9, 27)
-        key = str(uuid1())
-        project_id = environ.get("PROJECT_ID")
-        if not project_id:
-            self.fail("PROJECT_ID environment variable not set for BigQuery test.")
+        def setUp(self):
+            # 使用类级别实例，或者按需在每个测试中创建新实例
+            self.gcp_module = self.gcp_module_instance
 
-        dataset_id, table_id = self.BIGQUERY_DESTINATION.split('.')
-        query = f"SELECT date, value FROM `{project_id}.{dataset_id}.{table_id}` WHERE instrument='test' AND key='{key}'"
-        data = DataFrame({'date': [dt], 'instrument': ['test'], 'key': [key], 'value': [42.0]})
-        destination_table_ref = f"{project_id}.{self.BIGQUERY_DESTINATION}"
+        def test_bigquery(self):
+            dt = date(1977, 9, 27)
+            key = str(uuid1())
+            project_id = environ.get("PROJECT_ID")
+            if not project_id:
+                self.fail("PROJECT_ID environment variable not set for BigQuery test.")
 
-        try:
-            load_job = self.gcp_module.bq.load_table_from_dataframe(data, destination_table_ref, job_config=self.BIGQUERY_JOB_CONFIG)
-            load_job.result(timeout=60)
-            self.assertTrue(load_job.done())
-        except Exception as e:
-            job_errors = getattr(load_job, 'errors', "N/A")
-            self.fail(f"BigQuery load job failed or timed out: {e}. Errors: {job_errors}")
+            dataset_id, table_id = self.BIGQUERY_DESTINATION.split('.')
+            query = f"SELECT date, value FROM `{project_id}.{dataset_id}.{table_id}` WHERE instrument='test' AND key='{key}'"
+            data = DataFrame({'date': [dt], 'instrument': ['test'], 'key': [key], 'value': [42.0]})
+            destination_table_ref = f"{project_id}.{self.BIGQUERY_DESTINATION}"
 
-        result = self.gcp_module.bq.query(query).result()
-        rows = [{k: v for k, v in row.items()} for row in result]
-        self.assertEqual(1, len(rows), f"Expected 1 row, got {len(rows)}. Query: {query}")
-        self.assertDictEqual({'date': dt, 'value': 42.0}, rows[0])
+            try:
+                load_job = self.gcp_module.bq.load_table_from_dataframe(data, destination_table_ref, job_config=self.BIGQUERY_JOB_CONFIG)
+                load_job.result(timeout=60)
+                self.assertTrue(load_job.done())
+            except Exception as e:
+                job_errors = getattr(load_job, 'errors', "N/A")
+                self.fail(f"BigQuery load job failed or timed out: {e}. Errors: {job_errors}")
 
-        df = self.gcp_module.bq.query(query).to_dataframe()
-        pd_data_subset = data[['date', 'value']].reset_index(drop=True)
-        bq_df_subset = df[['date', 'value']].reset_index(drop=True)
+            result = self.gcp_module.bq.query(query).result()
+            rows = [{k: v for k, v in row.items()} for row in result]
+            self.assertEqual(1, len(rows), f"Expected 1 row, got {len(rows)}. Query: {query}")
+            self.assertDictEqual({'date': dt, 'value': 42.0}, rows[0])
 
-        # 转换为相同类型以避免比较问题，例如日期对象
-        pd_data_subset['date'] = pd_data_subset['date'].astype(str)
-        bq_df_subset['date'] = bq_df_subset['date'].astype(str)
+            df = self.gcp_module.bq.query(query).to_dataframe()
+            pd_data_subset = data[['date', 'value']].reset_index(drop=True)
+            bq_df_subset = df[['date', 'value']].reset_index(drop=True)
 
-        self.assertTrue(pd_data_subset.equals(bq_df_subset),
-                        f"DataFrame mismatch.\nExpected:\n{pd_data_subset}\nGot:\n{bq_df_subset}")
+            # 转换为相同类型以避免比较问题，例如日期对象
+            pd_data_subset['date'] = pd_data_subset['date'].astype(str)
+            bq_df_subset['date'] = bq_df_subset['date'].astype(str)
 
+            self.assertTrue(pd_data_subset.equals(bq_df_subset),
+                            f"DataFrame mismatch.\nExpected:\n{pd_data_subset}\nGot:\n{bq_df_subset}")
 
-    def test_firestore(self):
-        col_ref = self.gcp_module.db.collection(self.FIRESTORE_COLLECTION)
-        doc_id = str(uuid1())
-        doc_ref = col_ref.document(doc_id)
-        try:
-            doc_ref.set({'key': 'value'})
-            doc_ref.update({'anotherKey': 'anotherValue'})
+        def test_firestore(self):
+            col_ref = self.gcp_module.db.collection(self.FIRESTORE_COLLECTION)
+            doc_id = str(uuid1())
+            doc_ref = col_ref.document(doc_id)
+            try:
+                doc_ref.set({'key': 'value'})
+                doc_ref.update({'anotherKey': 'anotherValue'})
 
-            actual_doc = doc_ref.get()
-            self.assertTrue(actual_doc.exists, "Document does not exist after set/update.")
-            actual_dict = actual_doc.to_dict()
-            self.assertDictEqual({'key': 'value', 'anotherKey': 'anotherValue'}, actual_dict)
+                actual_doc = doc_ref.get()
+                self.assertTrue(actual_doc.exists, "Document does not exist after set/update.")
+                actual_dict = actual_doc.to_dict()
+                self.assertDictEqual({'key': 'value', 'anotherKey': 'anotherValue'}, actual_dict)
 
-            result_query = col_ref.where('key', '==', 'value').where('anotherKey', '==', 'anotherValue').limit(1).stream()
-            results = [doc for doc in result_query if doc.id == doc_id]
-            self.assertEqual(1, len(results), "Document not found with specified query.")
-            self.assertEqual(doc_id, results[0].id)
+                result_query = col_ref.where('key', '==', 'value').where('anotherKey', '==', 'anotherValue').limit(1).stream()
+                results = [doc for doc in result_query if doc.id == doc_id]
+                self.assertEqual(1, len(results), "Document not found with specified query.")
+                self.assertEqual(doc_id, results[0].id)
 
-            doc_ref.update({'anotherKey': DELETE_FIELD})
-            actual_dict_after_delete_field = doc_ref.get().to_dict()
-            self.assertDictEqual({'key': 'value'}, actual_dict_after_delete_field)
+                doc_ref.update({'anotherKey': DELETE_FIELD})
+                actual_dict_after_delete_field = doc_ref.get().to_dict()
+                self.assertDictEqual({'key': 'value'}, actual_dict_after_delete_field)
 
-        finally:
-            doc_ref.delete()
-            self.assertFalse(doc_ref.get().exists, "Document was not deleted.")
+            finally:
+                doc_ref.delete()
+                self.assertFalse(doc_ref.get().exists, "Document was not deleted.")
 
+        def test_logging(self):
+            try:
+                self.gcp_module.logging.debug('Test log entry from integration test')
+            except Exception as e:
+                self.fail(f"Logging failed: {e}")
 
-    def test_logging(self):
-        try:
-            self.gcp_module.logging.debug('Test log entry from integration test')
-        except Exception as e:
-            self.fail(f"Logging failed: {e}")
+else:
+
+    @unittest.skip("Skipping GCP tests for local development runs.")
+    class TestGcpModule(unittest.TestCase):
+        pass
 
 
 @unittest.skipIf(Intent is None or ibc_config is None or ibc_config.get('twsVersion') is None or Environment is None,

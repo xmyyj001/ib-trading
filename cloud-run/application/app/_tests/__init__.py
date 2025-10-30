@@ -1,0 +1,4 @@
+from test_support import install_ib_insync_stub, install_google_cloud_stub
+
+install_ib_insync_stub()
+install_google_cloud_stub()

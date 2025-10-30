@@ -248,9 +248,26 @@ gcloud scheduler jobs create http nightly-test-signal --project=${PROJECT_ID} \
     --headers="Content-Type=application/json"
 ```
 
+#### Commander 编排作业：`daily-strategy-orchestrator`
+
+*   **说明**: 对于“策略即意图”升级方案中的 Commander 架构，只需要一个每日调度任务。该作业触发一个编排入口（Cloud Function、Workflows 或 Cloud Run `/orchestrator` 端点），在函数内部顺序执行 `策略 -> 对账 -> 总指挥` 三步，并在中长期窗口内完成全部策略的信号/执行。
+
+```bash
+gcloud scheduler jobs create http daily-strategy-orchestrator --project=${PROJECT_ID} \
+    --location=${GCP_REGION} \
+    --schedule="15 16 * * 1-5" \
+    --time-zone="America/New_York" \
+    --uri="${ORCHESTRATOR_URL}" \
+    --http-method=POST \
+    --oidc-service-account-email="${SERVICE_ACCOUNT_EMAIL}" \
+    --headers="Content-Type=application/json"
+```
+
+*如需透传策略白名单或运行窗口，可在请求体中加入 `{"window": "2025-01-15", "strategies": ["spymacdvixy","dummy"]}` 等参数，由编排函数负责验证 `updated_at` 与窗口匹配。*
+
 ### 附录 C: 后续部署计划
 
-1. **`allocation` / `spymacdvixy`**: 等待策略代码完成异步化与 Cloud Run 适配后，再补充真实的 `curl` 示例与 Scheduler 配置。
+1. **`allocation` / `spymacdvixy`**: 等待策略代码完成异步化与 Cloud Run 适配后，更新 Orchestrator 入口的调用文档与故障回滚步骤。
 2. **`trade-reconciliation`**: 完成 Firestore 异步调用改造后，恢复 GET/POST 的审计说明，并补充观察日志或指标的步骤。
 3. **额外管理意图**: 若新增 `/risk-check`、`/eod-check` 等端点，需同步更新本文档的测试与调度章节，避免出现找不到路径的命令。
 

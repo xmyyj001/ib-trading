@@ -36,6 +36,26 @@ Cloud Run 版本目前是主线实现；`gke/` 目录保留历史方案与备用
 
 ---
 
+## 1.2 本地开发环境准备
+
+```bash
+# 1. （可选）创建虚拟环境
+python3 -m venv .venv
+source .venv/bin/activate
+
+# 2. 安装依赖（含 ib-insync 与 Google Cloud SDK 客户端）
+pip install --upgrade pip
+pip install -r cloud-run/application/app/requirements.txt
+
+# 3. 运行测试
+cd cloud-run/application/app
+python3 -m unittest
+```
+
+> 如未配置 IB Gateway 或 GCP 凭据，部分测试会依赖 mock 并自动跳过；确保部署前在具备访问权限的环境验证完整流程。
+
+---
+
 ## 2. 核心设计原则 (截至 2025-10-25 的版本)
 
 经过多轮的实盘调试与迭代，本系统当前遵循以下核心设计原则，这对于理解系统的行为至关重要：
@@ -119,7 +139,9 @@ graph TD
 ### 3.1 核心意图 (Intents)
 
 **已部署 / 可调用**
-*   `testsignalgenerator`: 当前唯一部署到 Cloud Run 的策略意图。它获取 SPY 的 30 分钟 K 线，计算 MACD 指标，并根据信号直接下达限价单。
+*   `testsignalgenerator`: 获取 SPY 的 30 分钟 K 线，计算 MACD 指标，并将目标持仓写入 Firestore（不再直接下单）。
+*   `spy_macd_vixy`: 经典 SPY/VIXY 组合策略，发布多空对冲的目标仓位。
+*   `orchestrator`: 掌管“策略 → 对账 → 总指挥”三步流程的编排入口，可一次性驱动多个策略和 Commander。
 *   `summary`: 获取账户摘要，包括净值、持仓、未结订单等。
 *   `close_all`: 平掉所有现有头寸并取消所有挂单。
 *   `cash_balancer`: 调整账户中的现金余额。
@@ -128,9 +150,9 @@ graph TD
 *   `trade_reconciliation`: 仍在调试，暂时只可靠地写入持仓快照，成交审计需待修复。
 
 **计划中的意图**
-*   `allocation`: 待异步化与策略依赖完成后，恢复在 Cloud Run 上的“总指挥”角色。
+*   更多策略意图：`spy_macd_vixy`、`dummy` 等仍在迁移，未来会加入 orchestrator 编排。
 *   `risk-check` / `eod-check` 等风控意图：处于设计阶段，未来用于配合 Scheduler 场景执行。
-*   其他策略文件（如 `spymacdvixy`, `dummy` 等）仍在本地开发，待迁移到“策略即意图”范式后部署。
+*   历史策略文件（如 `spymacdvixy`, `dummy`）仍在本地开发，待完成意图化改造后部署。
 
 ### 3.2 如何添加新策略（意图）
 
@@ -152,18 +174,18 @@ SERVICE_URL=$(gcloud run services describe ib-paper --region <your-region> --for
 TOKEN=$(gcloud auth print-identity-token)
 ```
 
-### 4.2 示例 1: 触发 `testsignalgenerator` 策略
+### 4.2 示例 1: 触发 `orchestrator` 编排
 
-这是一个 `POST` 请求，因为它会产生实际的交易行为。
+这是一个 `POST` 请求，编排过程依次执行所有策略意图、`/reconcile` 和 `/allocation`。
 
 ```bash
-##curl -X POST -H "Authorization: Bearer ${TOKEN}" "${SERVICE_URL}/testsignalgenerator"
 curl -X POST -H "Authorization: Bearer ${TOKEN}" \
-   -H "Content-Type: application/json" \
-   -d '{}' \
-   "${SERVICE_URL}/testsignalgenerator"
-
+  -H "Content-Type: application/json" \
+  -d '{"strategies": ["testsignalgenerator", "spy_macd_vixy"], "dryRun": true}' \
+  "${SERVICE_URL}/orchestrator"
 ```
+
+> 调试单个策略仍可直接调用 `/testsignalgenerator`，但该端点只写入 Firestore 目标仓位，不会下单。
 
 ### 4.3 示例 2: 查看账户摘要
 
