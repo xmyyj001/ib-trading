@@ -25,14 +25,17 @@ export CLOUD_BUILD_REGION="${GCP_REGION}"
 export USER_EMAIL_ACCOUNT="xmyyj001@gmail.com"
 
 # --- Service & Repo Naming ---
-# The name for the Artifact Registry repository
-# export REPO_NAME="cloud-run-repo"
-
-# Full Artifact Registry path (新仓库名称与服务基名对齐，避免复用旧仓库)
-export IMAGE_REPO="${GCP_REGION}-docker.pkg.dev/${PROJECT_ID}/${SERVICE_NAME_BASE}-app"
-
 # The name for the Cloud Run service (and other related resources)
 export SERVICE_NAME_BASE="ib-trading"
+
+# Artifact Registry repository（应用与基础镜像共用）
+export ARTIFACT_REPO_NAME="${SERVICE_NAME_BASE}-app"
+
+# Full Artifact Registry paths
+export IMAGE_REPO="${GCP_REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPO_NAME}"
+export BASE_IMAGE_URL="${GCP_REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPO_NAME}/base:latest"
+export APPLICATION_IMAGE="${GCP_REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPO_NAME}/application"
+export IMAGE_TAG="latest"
 
 # The trading mode for this deployment (paper or live)
 export TRADING_MODE="paper"

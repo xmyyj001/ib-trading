@@ -1,94 +1,88 @@
 # ===================================================================
-# == CORRECTED & ROBUST v2: cloud-run/application/cloudbuild.yaml
-# == Uses modern, publicly accessible image paths to fix permission errors.
+# Cloud Build pipeline for IB Trading Cloud Run application
+# - Builds application image from prebuilt base image
+# - Pushes image to Artifact Registry in the target region
+# - Deploys the specified Cloud Run service
 # ===================================================================
 
 steps:
-  # 步骤 0: Pull-Latest-Base (使用 gcr.io/cloud-builders/docker 是可以的，但为了统一，我们也换掉)
-  - name: 'gcr.io/cloud-builders/docker' # 这个通常没问题，但为了保险可以换成下面的
-    id: 'Pull-Latest-Base'
-    args: ['pull', 'europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/base:latest']
+  # Step 0: Pull the latest base image to warm cache (optional but speeds up build)
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'Pull-Base'
+    args: ['pull', '${_BASE_IMAGE_URL}']
 
-  # 步骤 1: Build-Application
+  # Step 1: Build application image
   - name: 'gcr.io/cloud-builders/docker'
     id: 'Build-Application'
     args:
       - 'build'
       - '--no-cache'
       - '--build-arg'
-      - 'BASE_IMAGE_URL=europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/base:latest'
+      - 'BASE_IMAGE_URL=${_BASE_IMAGE_URL}'
       - '--tag'
-      - 'europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG}'
-      - 'cloud-run/application'
+      - '${_APPLICATION_IMAGE}:${_IMAGE_TAG}'
       - '--file'
       - 'cloud-run/application/Dockerfile'
-    waitFor: ['Pull-Latest-Base']
+      - 'cloud-run/application'
+    waitFor: ['Pull-Base']
 
-  # 步骤 2: Push-Application
+  # Step 2: Push application image
   - name: 'gcr.io/cloud-builders/docker'
     id: 'Push-Application'
-    args: ['push', 'europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG}']
+    args: ['push', '${_APPLICATION_IMAGE}:${_IMAGE_TAG}']
     waitFor: ['Build-Application']
 
-  # --- 检测和初始化步骤 ---
-
-  # 步骤 4: 运行依赖安全检查
-  - name: "gcr.io/cloud-builders/docker"
-    id: "Safety-Check"
+  # Step 3: Dependency safety check (non-blocking)
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'Safety-Check'
     args:
-      - "run"
-      - "--rm"
-      - "--entrypoint"
-      - "bash"
-      - "europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG}"
-      - "-c"
-      - "pip install --quiet safety && safety check --bare || true"
+      - 'run'
+      - '--rm'
+      - '--entrypoint'
+      - 'bash'
+      - '${_APPLICATION_IMAGE}:${_IMAGE_TAG}'
+      - '-c'
+      - 'pip install --quiet safety && safety check --bare || true'
     waitFor: ['Push-Application']
 
-  # 步骤 5: 运行单元测试 (当前跳过)
-  # 关键修复：将 gcr.io/google/cloud-sdk:slim 替换为 google/cloud-sdk:slim
-  # Docker Hub 上的官方镜像，Cloud Build 默认有权限拉取
-  - name: "google/cloud-sdk:slim"
-    id: "Unit-Tests"
-    entrypoint: "bash"
-    args: ["-c", "echo '--- SKIPPING UNIT TESTS ---' && exit 0"]
+  # Step 4: Unit tests placeholder (currently skipped)
+  - name: 'google/cloud-sdk:slim'
+    id: 'Unit-Tests'
+    entrypoint: 'bash'
+    args: ['-c', 'echo "--- SKIPPING UNIT TESTS ---" && exit 0']
     waitFor: ['Push-Application']
 
-  # 步骤 6: 初始化 Firestore 配置
-  - name: 'python:3.9-slim' # 这个来自 Docker Hub，没问题
-    id: "Initialize-Firestore"
+  # Step 5: Initialize Firestore schema (idempotent)
+  - name: 'python:3.9-slim'
+    id: 'Initialize-Firestore'
     entrypoint: 'bash'
     args:
-    - -c
-    - |
-      set -e
-      pip install --quiet google-cloud-firestore packaging
-      python cloud-run/application/app/lib/init_firestore.py "${PROJECT_ID}"
+      - '-c'
+      - |
+        set -e
+        pip install --quiet google-cloud-firestore packaging
+        python cloud-run/application/app/lib/init_firestore.py "${PROJECT_ID}"
     waitFor: ['Push-Application']
 
-  # 步骤 7: 运行集成测试 (当前跳过)
-  # 关键修复：同样替换镜像地址
-  - name: "google/cloud-sdk:slim"
-    id: "Integration-Tests"
-    entrypoint: "bash"
-    args: ["-c", "echo '--- SKIPPING INTEGRATION TESTS ---' && exit 0"]
+  # Step 6: Integration tests placeholder (currently skipped)
+  - name: 'google/cloud-sdk:slim'
+    id: 'Integration-Tests'
+    entrypoint: 'bash'
+    args: ['-c', 'echo "--- SKIPPING INTEGRATION TESTS ---" && exit 0']
     waitFor: ['Initialize-Firestore']
 
-  # --- 部署步骤 ---
-
-  # 步骤 8: 部署到 Cloud Run
-  # 关键修复：使用 google/cloud-sdk:slim 作为部署工具
+  # Step 7: Deploy to Cloud Run
   - name: 'google/cloud-sdk:slim'
     id: 'Deploy-to-Cloud-Run'
-    entrypoint: gcloud
+    entrypoint: 'gcloud'
     args:
       - 'run'
       - 'deploy'
-      - 'ib-${_TRADING_MODE}'
+      - '${_SERVICE_NAME}'
       - '--image'
-      - 'europe-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/application:${_MY_IMAGE_TAG}'
+      - '${_APPLICATION_IMAGE}:${_IMAGE_TAG}'
       - '--region'
-      - '${_GCP_REGION}'
+      - '${_REGION}'
       - '--platform'
       - 'managed'
       - '--max-instances'
@@ -98,19 +92,25 @@ steps:
       - '--cpu'
       - '2'
       - '--service-account'
-      - 'ib-trading@${PROJECT_ID}.iam.gserviceaccount.com'
+      - '${_SERVICE_ACCOUNT}'
       - '--no-allow-unauthenticated'
-      - '--set-env-vars=PROJECT_ID=${PROJECT_ID},TRADING_MODE=${_TRADING_MODE},TWS_VERSION=1030'
-      - '--set-secrets=IB_USERNAME=ib-username:latest,IB_PASSWORD=ib-password:latest'
+      - '--set-env-vars'
+      - 'PROJECT_ID=${PROJECT_ID},TRADING_MODE=${_TRADING_MODE},GCLOUD_REGION=${_REGION},TWS_VERSION=1030'
+      - '--set-secrets'
+      - 'IB_USERNAME=${_SECRET_NAME}:latest#userid,IB_PASSWORD=${_SECRET_NAME}:latest#password'
     waitFor:
       - 'Safety-Check'
       - 'Unit-Tests'
       - 'Integration-Tests'
 
-# 替换变量
 substitutions:
-  _GCP_REGION: asia-east1
-  _TRADING_MODE: paper
-  _MY_IMAGE_TAG: "latest"
+  _REGION: 'us-central1'
+  _SERVICE_NAME: 'ib-trading'
+  _SERVICE_ACCOUNT: 'replace-me@project.iam.gserviceaccount.com'
+  _TRADING_MODE: 'paper'
+  _BASE_IMAGE_URL: 'us-central1-docker.pkg.dev/${PROJECT_ID}/ib-trading-app/base:latest'
+  _APPLICATION_IMAGE: 'us-central1-docker.pkg.dev/${PROJECT_ID}/ib-trading-app/application'
+  _IMAGE_TAG: 'latest'
+  _SECRET_NAME: 'ib-paper-credentials'
 
-timeout: "1800s"
+timeout: '1800s'

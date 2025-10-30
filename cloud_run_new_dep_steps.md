@@ -83,9 +83,9 @@
    gcloud builds submit \
      --region=${CLOUD_BUILD_REGION} \
      --config cloud-run/application/cloudbuild.yaml \
-     --substitutions=_REGION=${GCP_REGION},_SERVICE_NAME=${SERVICE_NAME_BASE}
+     --substitutions=_REGION=${GCP_REGION},_SERVICE_NAME=${CLOUD_RUN_SERVICE_NAME},_SERVICE_ACCOUNT=${SERVICE_ACCOUNT_EMAIL},_TRADING_MODE=${TRADING_MODE},_BASE_IMAGE_URL=${BASE_IMAGE_URL},_APPLICATION_IMAGE=${APPLICATION_IMAGE},_IMAGE_TAG=${IMAGE_TAG},_SECRET_NAME=${SECRET_NAME}
    ```
-   *Build 成功后，Artifact Registry 中应出现带新 tag 的 `application` 镜像。*
+   *Build 完成后会自动 push 镜像并触发部署；Artifact Registry 中应出现带新 tag 的 `application` 镜像。*
 
 2. **记录构建版本**：留存 `BUILD_ID` 与镜像 tag，方便回滚。  
    ```bash
@@ -94,31 +94,18 @@
 
 ## 6. 部署 Cloud Run 服务
 
+Cloud Build 的 `Deploy-to-Cloud-Run` 步骤会自动发布新修订。完成后执行以下命令确认部署结果。
+
 1. **预检查当前修订版本**  
    ```bash
-   gcloud run services describe ${SERVICE_NAME_BASE} \
+   gcloud run services describe ${CLOUD_RUN_SERVICE_NAME} \
      --platform=managed \
      --region=${GCP_REGION} \
      --format='value(status.latestReadyRevisionName)'
    ```
-2. **发布新修订**  
+2. **验证修订就绪**  
    ```bash
-   gcloud run deploy ${SERVICE_NAME_BASE} \
-     --platform=managed \
-     --image=${IMAGE_REPO}/application:latest \
-     --region=${GCP_REGION} \
-     --service-account=${SERVICE_ACCOUNT_EMAIL} \
-     --set-secrets=IB_USER=${SECRET_NAME}:latest,IB_PASSWORD=${SECRET_NAME}:latest \
-     --set-env-vars=PROJECT_ID=${PROJECT_ID},GCLOUD_REGION=${GCP_REGION} \
-     --min-instances=0 \
-     --max-instances=1 \
-     --allow-unauthenticated=false
-   ```
-   *如需保留旧修订，确保未使用 `--no-traffic`。*
-
-3. **验证修订就绪**  
-   ```bash
-   gcloud run services describe ${SERVICE_NAME_BASE} \
+   gcloud run services describe ${CLOUD_RUN_SERVICE_NAME} \
      --platform=managed \
      --region=${GCP_REGION} \
      --format='value(status.latestCreatedRevisionName,status.latestReadyRevisionName)'
@@ -130,7 +117,7 @@
 1. **日志确认**：在 Cloud Logging 中筛选新修订的 `stdout`/`stderr`，确认 IB Gateway 登录成功、`spy_macd_vixy` 与 `reconcile` 执行无异常。
    ```bash
    gcloud logging read \
-     "resource.type=cloud_run_revision AND resource.labels.service_name=${SERVICE_NAME_BASE}" \
+     "resource.type=cloud_run_revision AND resource.labels.service_name=${CLOUD_RUN_SERVICE_NAME}" \
      --limit=50 --freshness=1h --format="json"
    ```
 2. **Dry-Run 调用**：使用 Cloud Shell 或本地 `curl` 触发 orchestrator。
@@ -154,7 +141,7 @@
 
 1. **快速回滚**：将 Cloud Run 服务流量切回上一修订。
    ```bash
-   gcloud run services update-traffic ${SERVICE_NAME_BASE} \
+   gcloud run services update-traffic ${CLOUD_RUN_SERVICE_NAME} \
      --platform=managed \
      --region=${GCP_REGION} \
      --to-revisions ${PREV_REVISION}=100
