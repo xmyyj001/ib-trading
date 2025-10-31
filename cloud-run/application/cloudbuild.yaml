@@ -9,7 +9,7 @@ steps:
   # Step 0: Pull the latest base image to warm cache (optional but speeds up build)
   - name: 'gcr.io/cloud-builders/docker'
     id: 'Pull-Base'
-    args: ['pull', '${_BASE_IMAGE_URL}']
+    args: ['pull', '$_BASE_IMAGE_URL']
 
   # Step 1: Build application image
   - name: 'gcr.io/cloud-builders/docker'
@@ -18,9 +18,9 @@ steps:
       - 'build'
       - '--no-cache'
       - '--build-arg'
-      - 'BASE_IMAGE_URL=${_BASE_IMAGE_URL}'
+      - 'BASE_IMAGE_URL=$_BASE_IMAGE_URL'
       - '--tag'
-      - '${_APPLICATION_IMAGE}:${_IMAGE_TAG}'
+      - '$_APPLICATION_IMAGE:$_IMAGE_TAG'
       - '--file'
       - 'cloud-run/application/Dockerfile'
       - 'cloud-run/application'
@@ -29,7 +29,7 @@ steps:
   # Step 2: Push application image
   - name: 'gcr.io/cloud-builders/docker'
     id: 'Push-Application'
-    args: ['push', '${_APPLICATION_IMAGE}:${_IMAGE_TAG}']
+    args: ['push', '$_APPLICATION_IMAGE:$_IMAGE_TAG']
     waitFor: ['Build-Application']
 
   # Step 3: Dependency safety check (non-blocking)
@@ -40,7 +40,7 @@ steps:
       - '--rm'
       - '--entrypoint'
       - 'bash'
-      - '${_APPLICATION_IMAGE}:${_IMAGE_TAG}'
+      - '$_APPLICATION_IMAGE:$_IMAGE_TAG'
       - '-c'
       - 'pip install --quiet safety && safety check --bare || true'
     waitFor: ['Push-Application']
@@ -61,7 +61,7 @@ steps:
       - |
         set -e
         pip install --quiet google-cloud-firestore packaging
-        python cloud-run/application/app/lib/init_firestore.py "${PROJECT_ID}"
+        python cloud-run/application/app/lib/init_firestore.py "$PROJECT_ID"
     waitFor: ['Push-Application']
 
   # Step 6: Integration tests placeholder (currently skipped)
@@ -78,11 +78,11 @@ steps:
     args:
       - 'run'
       - 'deploy'
-      - '${_SERVICE_NAME}'
+      - '$_SERVICE_NAME'
       - '--image'
-      - '${_APPLICATION_IMAGE}:${_IMAGE_TAG}'
+      - '$_APPLICATION_IMAGE:$_IMAGE_TAG'
       - '--region'
-      - '${_REGION}'
+      - '$_REGION'
       - '--platform'
       - 'managed'
       - '--max-instances'
@@ -92,12 +92,12 @@ steps:
       - '--cpu'
       - '2'
       - '--service-account'
-      - '${_SERVICE_ACCOUNT}'
+      - '$_SERVICE_ACCOUNT'
       - '--no-allow-unauthenticated'
       - '--set-env-vars'
-      - 'PROJECT_ID=${PROJECT_ID},TRADING_MODE=${_TRADING_MODE},GCLOUD_REGION=${_REGION},TWS_VERSION=${_TWS_VERSION}'
+      - 'PROJECT_ID=$PROJECT_ID,TRADING_MODE=$_TRADING_MODE,GCLOUD_REGION=$_REGION,TWS_VERSION=$_TWS_VERSION'
       - '--set-secrets'
-      - 'IB_USERNAME=${_SECRET_NAME}:latest#userid,IB_PASSWORD=${_SECRET_NAME}:latest#password'
+      - 'IB_USERNAME=$_USERNAME_SECRET:latest,IB_PASSWORD=$_PASSWORD_SECRET:latest'
     waitFor:
       - 'Safety-Check'
       - 'Unit-Tests'
@@ -108,10 +108,11 @@ substitutions:
   _SERVICE_NAME: 'ib-trading'
   _SERVICE_ACCOUNT: 'replace-me@project.iam.gserviceaccount.com'
   _TRADING_MODE: 'paper'
-  _BASE_IMAGE_URL: 'us-central1-docker.pkg.dev/${PROJECT_ID}/ib-trading-app/base:latest'
-  _APPLICATION_IMAGE: 'us-central1-docker.pkg.dev/${PROJECT_ID}/ib-trading-app/application'
+  _BASE_IMAGE_URL: 'us-central1-docker.pkg.dev/$PROJECT_ID/ib-trading-app/base:latest'
+  _APPLICATION_IMAGE: 'us-central1-docker.pkg.dev/$PROJECT_ID/ib-trading-app/application'
   _IMAGE_TAG: 'latest'
-  _SECRET_NAME: 'ib-paper-credentials'
+  _USERNAME_SECRET: 'ib-paper-username'
+  _PASSWORD_SECRET: 'ib-paper-password'
   _TWS_VERSION: '1037'
 
 timeout: '1800s'

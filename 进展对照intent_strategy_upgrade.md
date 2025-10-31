@@ -91,3 +91,24 @@
     等），验证脚本就能计算出正数部署资本。
 
   总结：离线测试阶段能确认键名与配置同步已足够，最后一步需要在部署后的真实环境里跑一遍 orchestrator/reconcile，确保 Firestore 自动补齐快照。
+
+
+
+• - 调整 deployment_vars.sh:45-47，改为独立维护 IB_USERNAME_SECRET / IB_PASSWORD_SECRET，供 Cloud Run 直接挂载用户名、密码；保留旧的 JSON
+    Secret 变量为注释避免误用。
+  - 更新 cloud_run_new_dep_steps.md:29-96，前置检查改为包含新 secret 变量，并在部署准备第 4 步给出分别创建/更新用户名与密码 Secret 的命令；
+    同时修正 Cloud Build 的参数，传入 _USERNAME_SECRET、_PASSWORD_SECRET。
+  - 修改 cloud-run/application/cloudbuild.yaml:82-114，部署阶段通过 _USERNAME_SECRET / _PASSWORD_SECRET 注入 Secret，且新增
+    _TWS_VERSION=1037 配置，保持与基镜像一致。
+
+  当前 Cloud Build 失败源于 Secret 绑定方式不再使用 :latest#key；按上述修改后：
+
+  1. 在 Cloud Shell 重新 source deployment_vars.sh，运行文档第 4 步的两条 gcloud secrets ... 命令，把 IB 用户名和密码分别写入
+     ${IB_USERNAME_SECRET}、${IB_PASSWORD_SECRET}。
+  2. 重新构建 base 镜像：
+
+     gcloud builds submit \
+       --region=${CLOUD_BUILD_REGION} \
+       --config cloud-run/base/cloudbuild.yaml \
+       --substitutions=_BASE_IMAGE=${BASE_IMAGE_URL}
+  3. 再执行应用构建部署命令（带新 substitution 列表）。完成后按第 6–7 节检查 Cloud Run 修订和日志。

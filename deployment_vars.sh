@@ -41,8 +41,10 @@ export IMAGE_TAG="latest"
 export TRADING_MODE="paper"
 
 # --- IB Credentials & Secret Manager ---
-# The name for the secret in Google Secret Manager
-export SECRET_NAME="ib-${TRADING_MODE}-credentials"
+# The names for the secrets in Google Secret Manager（分别存储用户名与密码）
+# export SECRET_NAME="ib-${TRADING_MODE}-credentials"
+export IB_USERNAME_SECRET="ib-${TRADING_MODE}-username"
+export IB_PASSWORD_SECRET="ib-${TRADING_MODE}-password"
 
 # Your Interactive Brokers Username (for paper or live account)
 export IB_USERNAME="[REPLACE_WITH_YOUR_IB_USERNAME]"

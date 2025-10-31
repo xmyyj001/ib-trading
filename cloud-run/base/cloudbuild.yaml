@@ -7,17 +7,17 @@ steps:
     args:
       - 'build'
       - '--tag'
-      - '${_BASE_IMAGE}'
+      - '$_BASE_IMAGE'
       - '.'
     dir: 'cloud-run/base'
 
   - name: 'gcr.io/cloud-builders/docker'
     id: 'Push-Base'
-    args: ['push', '${_BASE_IMAGE}']
+    args: ['push', '$_BASE_IMAGE']
     waitFor: ['Build-Base']
 
 images:
-  - '${_BASE_IMAGE}'
+  - '$_BASE_IMAGE'
 
 substitutions:
-  _BASE_IMAGE: 'us-central1-docker.pkg.dev/${PROJECT_ID}/ib-trading-app/base:latest'
+  _BASE_IMAGE: 'us-central1-docker.pkg.dev/$PROJECT_ID/ib-trading-app/base:latest'

@@ -26,7 +26,7 @@
 ## 3. 前置条件检查
 
 1. **环境变量**：确认 `deployment_vars.sh` 包含如下关键项且值正确：  
-   `PROJECT_ID`, `GCP_REGION`, `SERVICE_NAME_BASE`, `IMAGE_REPO`, `SECRET_NAME`, `SERVICE_ACCOUNT_EMAIL`, `IB_USERNAME`, `IB_PASSWORD`, `CLOUD_BUILD_REGION`（推荐与 `GCP_REGION` 相同）。
+   `PROJECT_ID`, `GCP_REGION`, `SERVICE_NAME_BASE`, `IMAGE_REPO`, `IB_USERNAME_SECRET`, `IB_PASSWORD_SECRET`, `SERVICE_ACCOUNT_EMAIL`, `IB_USERNAME`, `IB_PASSWORD`, `CLOUD_BUILD_REGION`（推荐与 `GCP_REGION` 相同）。
 2. **本地凭证**：运行 `gcloud auth list` 确认当前账号已登录，并使用 `gcloud config list project` 校验默认项目。
 3. **代码状态**：确保工作区包含待部署分支的最新代码，必要时执行 `git status` 保证没有漏提的本地修改。
 4. **网络要求**：本地环境需可访问 gcloud 与 Artifact Registry；若在 Cloud Shell，确认会话拥有部署权限。
@@ -61,11 +61,15 @@
    *如已存在，可跳过或使用 `gcloud artifacts repositories describe` 校验 `location`.*
 4. **Secret 准备**（仅当首次或需更新 IB 凭据时执行）  
    ```bash
-   gcloud secrets describe ${SECRET_NAME} --project=${PROJECT_ID} >/dev/null 2>&1 || \
-     gcloud secrets create ${SECRET_NAME} --replication-policy="automatic" --project=${PROJECT_ID}
-   
-   printf '{"userid":"%s","password":"%s"}' "${IB_USERNAME}" "${IB_PASSWORD}" | \
-     gcloud secrets versions add ${SECRET_NAME} --data-file=-
+   gcloud secrets describe ${IB_USERNAME_SECRET} --project=${PROJECT_ID} >/dev/null 2>&1 || \
+     gcloud secrets create ${IB_USERNAME_SECRET} --replication-policy="automatic" --project=${PROJECT_ID}
+   printf "%s" "${IB_USERNAME}" | \
+     gcloud secrets versions add ${IB_USERNAME_SECRET} --data-file=-
+
+   gcloud secrets describe ${IB_PASSWORD_SECRET} --project=${PROJECT_ID} >/dev/null 2>&1 || \
+     gcloud secrets create ${IB_PASSWORD_SECRET} --replication-policy="automatic" --project=${PROJECT_ID}
+   printf "%s" "${IB_PASSWORD}" | \
+     gcloud secrets versions add ${IB_PASSWORD_SECRET} --data-file=-
    ```
 5. **服务账号权限校验**：快速检查关键角色是否已绑定；若缺失则追加绑定。  
    ```bash
@@ -91,7 +95,7 @@
    gcloud builds submit \
      --region=${CLOUD_BUILD_REGION} \
      --config cloud-run/application/cloudbuild.yaml \
-     --substitutions=_REGION=${GCP_REGION},_SERVICE_NAME=${CLOUD_RUN_SERVICE_NAME},_SERVICE_ACCOUNT=${SERVICE_ACCOUNT_EMAIL},_TRADING_MODE=${TRADING_MODE},_BASE_IMAGE_URL=${BASE_IMAGE_URL},_APPLICATION_IMAGE=${APPLICATION_IMAGE},_IMAGE_TAG=${IMAGE_TAG},_SECRET_NAME=${SECRET_NAME}
+     --substitutions=_REGION=${GCP_REGION},_SERVICE_NAME=${CLOUD_RUN_SERVICE_NAME},_SERVICE_ACCOUNT=${SERVICE_ACCOUNT_EMAIL},_TRADING_MODE=${TRADING_MODE},_BASE_IMAGE_URL=${BASE_IMAGE_URL},_APPLICATION_IMAGE=${APPLICATION_IMAGE},_IMAGE_TAG=${IMAGE_TAG},_USERNAME_SECRET=${IB_USERNAME_SECRET},_PASSWORD_SECRET=${IB_PASSWORD_SECRET}
    ```
    *Build 完成后会自动 push 镜像并触发部署；Artifact Registry 中应出现带新 tag 的 `application` 镜像。*
 
