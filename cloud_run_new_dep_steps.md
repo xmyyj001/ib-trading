@@ -134,11 +134,23 @@ Cloud Build 的 `Deploy-to-Cloud-Run` 步骤会自动发布新修订。完成后
    ```
 2. **Dry-Run 调用**：使用 Cloud Shell 或本地 `curl` 触发 orchestrator。
    ```bash
+    unset ORCHESTRATOR_URL
+   export ORCHESTRATOR_URL="https://ib-paper-599151217267.us-central1.run.app"
+
    curl -X POST "${ORCHESTRATOR_URL}" \
      -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
      -H "Content-Type: application/json" \
      -d '{"strategies":["testsignalgenerator","spy_macd_vixy"],"dryRun":true,"runReconcile":true}'
    ```
+
+   * check running details:
+   ```
+   gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="ib-paper"' \
+      --project=gold-gearbox-424413-k1 \
+      --freshness=5m \
+      --format="table(timestamp, severity, textPayload)" 
+      ```
+
 3. **Firestore 快照检查**（使用 `verify_trading.py` 或 `gcloud firestore`）  
    * 运行 `python verify_trading.py --mode paper`；输出应显示非零 `net_liquidation` 与最新 `updated_at`。  
    * 在 Firestore 控制台确认 `strategies/spy_macd_vixy/intent/latest` 与 `positions/paper/latest_portfolio` 已生成并刷新时间戳。

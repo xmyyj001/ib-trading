@@ -115,35 +115,15 @@
 
 
 
+• Logs confirm the call hit the service, but the instance is still running on the old Python 3.9 base—INFO: … module 'importlib.metadata'
+  has no attribute 'packages_distributions' appears right after startup, so the orchestrator never completes and curl sees an empty
+  response. The Cloud Build step is also pulling /usr/local/lib/python3.9/…, which means the new base image hasn’t been built/pushed or the
+  application image wasn’t rebuilt against it.
 
-读入logging50.txt :
-  Cloud Run 日志要点
+  Next steps:
 
-  - ib-paper-00001-xgt 修订在启动后不断尝试连接本地 IB Gateway (127.0.0.1:4002)，每次都收到 ConnectionRefusedError，随后记录 “Make sure API
-    port on TWS/IBG is open”。说明容器里 IB Gateway/IBC 没有成功跑起来（或监听端口不同），当前唯一进程就是我们的应用线程在重连。
-  - Cloud Run 恒定 15 秒后重试，再抛同样的错误；暂未看到策略/对账的日志（意味着 orchestrator 尚未运行，或因连接失败未往下执行）。
-
-  下一步建议
-
-  1. 先保证服务端能连上 Gateway。通常要确认：
-      - cloud-run/base 镜像是否已包含并启动 IB Gateway（gatewaystart.sh/supervisord）；
-      - cloud-run/application 的入口是否触发了 Gateway 启动脚本；
-      - Cloud Run 环境变量里是否正确传入了 IB_USERNAME_SECRET/IB_PASSWORD_SECRET，并且 IBC 配置文件指向 4002 端口。
-        若 gateway 启动脚本在日志中缺失，可以加一条初始化日志确认。
-  2. 在还没解决连接问题前，curl/verify_trading.py 的验证会继续失败，可暂缓。等 Gateway 连通后再执行：
-
-     export SERVICE_URL=$(gcloud run services describe ${CLOUD_RUN_SERVICE_NAME} \
-       --region=${GCP_REGION} --format='value(status.url)')
-     curl -X POST "${SERVICE_URL}/orchestrator" \
-       -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
-       -H "Content-Type: application/json" \
-       -d '{"strategies":["testsignalgenerator","spy_macd_vixy"],"dryRun":true,"runReconcile":true}'
-     以及
-
-     python verify_trading.py \
-       --project-id "${PROJECT_ID}" \
-       --strategies spy_macd_vixy \
-       --trading-mode paper \
-       --show-intents
-  3. 如需排查 Gateway 启动，可在镜像中加入诊断脚本或检查 supervisor/gatewaystart.sh 的日志输出；必要时先在 Cloud Shell 本地运行同一容器，确
-     认 IBG 能用提供的用户名密码自动登录。
+  1. Rebuild and push the base image (cloud-run/base/cloudbuild.yaml) from your deployment workspace so BASE_IMAGE_URL points to the
+     Python 3.11 variant.
+  2. Re-run the application Cloud Build with that updated _BASE_IMAGE_URL to rebuild and deploy the app image.
+  3. Once gcloud run services describe shows the new revision ready, redo the orchestrator curl—the importlib error should be gone, and
+     you’ll be testing the Python 3.11 runtime.
