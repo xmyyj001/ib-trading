@@ -46,3 +46,9 @@
 10. **Cloud Run Deployment (2025-10-31 16:58 UTC)**  
     - Rebuilt base/application images with corrected Cloud Build substitutions and deployed revision `ib-paper-00001-xgt` to `us-central1`.  
     - Post-deploy logs show IB Gateway connection refused at `127.0.0.1:4002`; orchestrator dry-run deferred until gateway connectivity is restored.
+
+11. **Runtime Compatibility Fix & Firestore Sync (2025-11-02 14:10 UTC)**  
+    - User reported Uvicorn boot failure inside the application container (`importlib.metadata` missing `packages_distributions`), revealing the base image still pinned to Python 3.9.  
+    - Assistant upgraded the base Dockerfile to Python 3.11 and refreshed Cloud Build configs; instructed rebuilding base/application images and redeploying.  
+    - After redeploy, orchestrator calls returned contract serialization errors because `ib_insync.util.contractToDict` was removed. Added `lib/ib_serialization.py` with a replacement helper, rewired strategies and reconcile intent, and switched Firestore persistence to embed `latest_portfolio` under `positions/{mode}` to satisfy path validation.  
+    - Updated `Allocation` intent, unit tests, and `verify_trading.py` to read the new snapshot shape; latest dry-run shows `spy_macd_vixy` succeeding while `testsignalgenerator` still needs business logic follow-up.

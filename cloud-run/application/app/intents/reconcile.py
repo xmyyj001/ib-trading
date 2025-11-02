@@ -3,6 +3,7 @@ from typing import Any, Dict, List
 
 from ib_insync import util
 
+from lib.ib_serialization import contract_to_dict
 from intents.intent import Intent
 
 
@@ -23,7 +24,7 @@ class Reconcile(Intent):
         holdings: List[Dict[str, Any]] = []
         for pos in positions:
             holdings.append({
-                "contract": util.contractToDict(pos.contract),
+                "contract": contract_to_dict(pos.contract),
                 "symbol": pos.contract.symbol,
                 "secType": pos.contract.secType,
                 "exchange": pos.contract.exchange,
@@ -46,7 +47,7 @@ class Reconcile(Intent):
                 "status": order_status.status,
                 "limitPrice": getattr(order, "lmtPrice", None),
                 "order": util.orderToDict(order),
-                "contract": util.contractToDict(trade.contract)
+                "contract": contract_to_dict(trade.contract)
             })
 
         def _extract_value(tag: str, currency: str = 'USD') -> float:
@@ -66,8 +67,8 @@ class Reconcile(Intent):
             "open_orders": open_orders
         }
 
-        doc_ref = self._env.db.document(f"positions/{self._env.trading_mode}/latest_portfolio")
-        doc_ref.set(payload)
+        doc_ref = self._env.db.collection("positions").document(self._env.trading_mode)
+        doc_ref.set({"latest_portfolio": payload}, merge=True)
 
         self._activity_log.update(status="success", reconciledHoldings=len(holdings), openOrders=len(open_orders))
         return payload

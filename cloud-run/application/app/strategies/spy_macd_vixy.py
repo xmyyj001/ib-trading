@@ -7,10 +7,11 @@ from ib_insync import Stock, util
 from intents.intent import Intent
 from lib.trading import Stock as StockInstrument
 from strategies.strategy import Strategy
+from lib.ib_serialization import contract_to_dict
 
 
 def _contract_dict(contract) -> Dict[str, Any]:
-    return util.contractToDict(contract) if contract else {}
+    return contract_to_dict(contract)
 
 
 class SpyMacdVixy(Strategy):
@@ -253,7 +254,7 @@ class SpyMacdVixyIntent(Intent):
     def _build_holdings_map(portfolio) -> Dict[str, Dict[str, Any]]:
         holdings = {}
         for item in portfolio:
-            contract = util.contractToDict(item.contract)
+            contract = contract_to_dict(item.contract)
             key = str(item.contract.conId)
             holdings[key] = {
                 'quantity': item.position,

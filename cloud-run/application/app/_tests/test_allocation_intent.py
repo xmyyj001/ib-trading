@@ -85,14 +85,15 @@ class FakePortfolioDocument:
 
 
 class FakeDB:
-    def __init__(self, portfolio, strategy_docs, execution_sink):
+    def __init__(self, portfolio, strategy_docs, execution_sink, trading_mode='paper'):
         self._portfolio = portfolio
         self._strategy_docs = strategy_docs
         self._execution_sink = execution_sink
+        self._trading_mode = trading_mode
 
     def document(self, path):
-        if path.endswith('latest_portfolio'):
-            return FakePortfolioDocument(path, self._portfolio)
+        if path == f'positions/{self._trading_mode}':
+            return FakePortfolioDocument(path, {'latest_portfolio': self._portfolio})
         raise ValueError(f"Unsupported document path: {path}")
 
     def collection(self, name):

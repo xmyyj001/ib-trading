@@ -46,11 +46,15 @@ class Allocation(Intent):
         now = datetime.now(timezone.utc)
         freshness_delta = timedelta(minutes=self._fresh_minutes)
 
-        portfolio_doc_ref = self._env.db.document(f"positions/{self._env.trading_mode}/latest_portfolio")
+        portfolio_doc_ref = self._env.db.collection("positions").document(self._env.trading_mode)
         portfolio_doc = portfolio_doc_ref.get()
-        if not portfolio_doc.exists:
+        doc_data = portfolio_doc.to_dict() if portfolio_doc.exists else None
+        if not doc_data:
             raise RuntimeError("Portfolio snapshot missing; run reconcile first.")
-        portfolio = portfolio_doc.to_dict() or {}
+
+        portfolio = doc_data.get("latest_portfolio", {})
+        if not portfolio:
+            raise RuntimeError("Portfolio snapshot missing; run reconcile first.")
 
         portfolio_updated_at = _parse_iso(portfolio.get('updated_at'))
         if portfolio_updated_at and now - portfolio_updated_at > freshness_delta:
@@ -159,7 +163,7 @@ class Allocation(Intent):
             'status': 'completed',
             'summary': f"Planned {len(order_plan)} orders; {'placed' if not self._dry_run else 'simulated'} {len(orders_placed)}",
             'context': {
-                'portfolio_snapshot_ref': f"{portfolio_doc_ref.path}@{portfolio.get('updated_at')}",
+                'portfolio_snapshot_ref': f"{portfolio_doc_ref.path}#latest_portfolio@{portfolio.get('updated_at')}",
                 'strategy_snapshots': strategy_snapshots,
                 'strategy_intents_refs': intent_refs,
                 'missing_strategies': missing_strategies,

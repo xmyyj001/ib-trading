@@ -6,11 +6,12 @@ from ib_insync import Stock, util
 
 from intents.intent import Intent
 from lib.trading import Stock as StockInstrument
+from lib.ib_serialization import contract_to_dict
 
 # Firestore document template helpers
 def _contract_dict(contract) -> Dict[str, Any]:
     """Serialize an ib_insync contract into a Firestore-friendly dict."""
-    return util.contractToDict(contract) if contract else {}
+    return contract_to_dict(contract)
 
 class TestSignalGenerator(Intent):
     """

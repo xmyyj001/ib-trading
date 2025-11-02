@@ -94,36 +94,23 @@
 
 
 
-• - 调整 deployment_vars.sh:45-47，改为独立维护 IB_USERNAME_SECRET / IB_PASSWORD_SECRET，供 Cloud Run 直接挂载用户名、密码；保留旧的 JSON
-    Secret 变量为注释避免误用。
-  - 更新 cloud_run_new_dep_steps.md:29-96，前置检查改为包含新 secret 变量，并在部署准备第 4 步给出分别创建/更新用户名与密码 Secret 的命令；
-    同时修正 Cloud Build 的参数，传入 _USERNAME_SECRET、_PASSWORD_SECRET。
-  - 修改 cloud-run/application/cloudbuild.yaml:82-114，部署阶段通过 _USERNAME_SECRET / _PASSWORD_SECRET 注入 Secret，且新增
-    _TWS_VERSION=1037 配置，保持与基镜像一致。
+• Replaced every contractToDict call with a local serializer and pushed Firestore writes into a valid document so the orchestrator no longer
+  dies on startup/Commander paths. Key updates:
 
-  当前 Cloud Build 失败源于 Secret 绑定方式不再使用 :latest#key；按上述修改后：
+  - Added contract_to_dict plus pruning logic in cloud-run/application/app/lib/ib_serialization.py:1 and wired it into Reconcile/strategies
+    (cloud-run/application/app/intents/reconcile.py:6, cloud-run/application/app/strategies/test_signal_generator.py:9, cloud-run/
+    application/app/strategies/spy_macd_vixy.py:10) to keep saved contracts JSON‑ready even without the old ib_insync helpers.
+  - Reconcile now stores the snapshot under the mode document (cloud-run/application/app/intents/reconcile.py:70), Allocation reads from the
+    same shape and tags the execution context accordingly (cloud-run/application/app/intents/allocation.py:49), and the allocation unit test
+    mocks that path (cloud-run/application/app/_tests/test_allocation_intent.py:88).
+  - verify_trading.py:24 now prefers the embedded positions/{mode} snapshot but still falls back to the legacy layout.
 
-  1. 在 Cloud Shell 重新 source deployment_vars.sh，运行文档第 4 步的两条 gcloud secrets ... 命令，把 IB 用户名和密码分别写入
-     ${IB_USERNAME_SECRET}、${IB_PASSWORD_SECRET}。
-  2. 重新构建 base 镜像：
-
-     gcloud builds submit \
-       --region=${CLOUD_BUILD_REGION} \
-       --config cloud-run/base/cloudbuild.yaml \
-       --substitutions=_BASE_IMAGE=${BASE_IMAGE_URL}
-  3. 再执行应用构建部署命令（带新 substitution 列表）。完成后按第 6–7 节检查 Cloud Run 修订和日志。
-
-
-
-• Logs confirm the call hit the service, but the instance is still running on the old Python 3.9 base—INFO: … module 'importlib.metadata'
-  has no attribute 'packages_distributions' appears right after startup, so the orchestrator never completes and curl sees an empty
-  response. The Cloud Build step is also pulling /usr/local/lib/python3.9/…, which means the new base image hasn’t been built/pushed or the
-  application image wasn’t rebuilt against it.
+  Tests not run; please execute python -m unittest discover -s _tests -t . from cloud-run/application/app once you’re ready.
 
   Next steps:
 
-  1. Rebuild and push the base image (cloud-run/base/cloudbuild.yaml) from your deployment workspace so BASE_IMAGE_URL points to the
-     Python 3.11 variant.
-  2. Re-run the application Cloud Build with that updated _BASE_IMAGE_URL to rebuild and deploy the app image.
-  3. Once gcloud run services describe shows the new revision ready, redo the orchestrator curl—the importlib error should be gone, and
-     you’ll be testing the Python 3.11 runtime.
+  1. Rebuild and push the base image if it hasn’t been refreshed yet, then rebuild the application image on top so Cloud Run picks up these
+     changes.
+  2. Deploy the new revision and rerun the /orchestrator curl; verify Cloud Logging no longer shows the serialization/path errors.
+  3. Re-check Firestore via python verify_trading.py --project-id gold-gearbox-424413-k1 --show-intents --strategies testsignalgenerator
+     spy_macd_vixy to confirm snapshots populate.

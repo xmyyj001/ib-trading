@@ -101,7 +101,9 @@
 
 2. **记录构建版本**：留存 `BUILD_ID` 与镜像 tag，方便回滚。  
    ```bash
-   gcloud builds describe ${BUILD_ID} --format='value(images[0])'
+   gcloud builds describe ${BUILD_ID} \
+   --region=us-central1 \
+   --format='value(images[0])'
    ```
 
 ## 6. 部署 Cloud Run 服务
