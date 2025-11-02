@@ -53,7 +53,7 @@ steps:
     waitFor: ['Push-Application']
 
   # Step 5: Initialize Firestore schema (idempotent)
-  - name: 'python:3.9-slim'
+  - name: 'python:3.11-slim'
     id: 'Initialize-Firestore'
     entrypoint: 'bash'
     args:

@@ -61,7 +61,7 @@ steps:
     waitFor: ['Push-Application']
 
   # 步骤 6: 初始化 Firestore 配置
-  - name: 'python:3.9-slim'
+  - name: 'python:3.11-slim'
     id: "Initialize-Firestore"
     entrypoint: 'bash'
     args:

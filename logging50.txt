@@ -1,0 +1,1044 @@
+[
+  {
+    "insertId": "6904edd10007b5acb22b045f",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:11:45.546409463Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:root:IB Thread (Outer Loop): Disconnected. Attempting reconnection in 15 seconds...",
+    "timestamp": "2025-10-31T17:11:45.505260Z"
+  },
+  {
+    "errorGroups": [
+      {
+        "id": "CKmi2fSZsby2tgE"
+      }
+    ],
+    "insertId": "6904edd10007b568b76fb068",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:11:45.546409463Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "textPayload": "Traceback (most recent call last):\n  File \"/home/app/main.py\", line 42, in resilient_main_logic\n    await env.ibgw.connectAsync(host='127.0.0.1', port=4002, clientId=1, timeout=15)\n  File \"/usr/local/lib/python3.9/site-packages/ib_insync/ib.py\", line 1748, in connectAsync\n    await self.client.connectAsync(host, port, clientId, timeout)\n  File \"/usr/local/lib/python3.9/site-packages/ib_insync/client.py\", line 211, in connectAsync\n    await asyncio.wait_for(self.conn.connectAsync(host, port), timeout)\n  File \"/usr/local/lib/python3.9/asyncio/tasks.py\", line 479, in wait_for\n    return fut.result()\n  File \"/usr/local/lib/python3.9/site-packages/ib_insync/connection.py\", line 39, in connectAsync\n    self.transport, _ = await loop.create_connection(\n  File \"/usr/local/lib/python3.9/asyncio/base_events.py\", line 1065, in create_connection\n    raise exceptions[0]\n  File \"/usr/local/lib/python3.9/asyncio/base_events.py\", line 1050, in create_connection\n    sock = await self._connect_sock(\n  File \"/usr/local/lib/python3.9/asyncio/base_events.py\", line 961, in _connect_sock\n    await self.sock_connect(sock, address)\n  File \"/usr/local/lib/python3.9/asyncio/selector_events.py\", line 500, in sock_connect\n    return await fut\n  File \"/usr/local/lib/python3.9/asyncio/selector_events.py\", line 535, in _sock_connect_cb\n    raise OSError(err, f'Connect call failed {address}')\nConnectionRefusedError: [Errno 111] Connect call failed ('127.0.0.1', 4002)",
+    "timestamp": "2025-10-31T17:11:45.505192Z"
+  },
+  {
+    "insertId": "6904edd10007b527119573c0",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:11:45.546409463Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "CRITICAL:root:IB Thread (Outer Loop): Critical error: [Errno 111] Connect call failed ('127.0.0.1', 4002)",
+    "timestamp": "2025-10-31T17:11:45.505127Z"
+  },
+  {
+    "insertId": "6904edd1000325273a7d277b",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:11:45.546409463Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "ERROR:ib_insync.client:Make sure API port on TWS/IBG is open",
+    "timestamp": "2025-10-31T17:11:45.206119Z"
+  },
+  {
+    "insertId": "6904edd1000324dd68768fcc",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:11:45.546409463Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "ERROR:ib_insync.client:API connection failed: ConnectionRefusedError(111, \"Connect call failed ('127.0.0.1', 4002)\")",
+    "timestamp": "2025-10-31T17:11:45.206045Z"
+  },
+  {
+    "insertId": "6904edd100032489916582be",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:11:45.546409463Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:ib_insync.client:Disconnecting",
+    "timestamp": "2025-10-31T17:11:45.205961Z"
+  },
+  {
+    "insertId": "6904edd100031f82398d29ae",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:11:45.546409463Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:ib_insync.client:Connecting to 127.0.0.1:4002 with clientId 1...",
+    "timestamp": "2025-10-31T17:11:45.204674Z"
+  },
+  {
+    "insertId": "6904edd100031f191e6e4e54",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:11:45.210160622Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:root:IB Thread (Outer Loop): Attempting to connect...",
+    "timestamp": "2025-10-31T17:11:45.204569Z"
+  },
+  {
+    "insertId": "6904edc200019a0d801e81a8",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:11:30.311759331Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:root:IB Thread (Outer Loop): Disconnected. Attempting reconnection in 15 seconds...",
+    "timestamp": "2025-10-31T17:11:30.104973Z"
+  },
+  {
+    "errorGroups": [
+      {
+        "id": "CKmi2fSZsby2tgE"
+      }
+    ],
+    "insertId": "6904edc2000199a25ddae78c",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:11:30.311759331Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "textPayload": "Traceback (most recent call last):\n  File \"/home/app/main.py\", line 42, in resilient_main_logic\n    await env.ibgw.connectAsync(host='127.0.0.1', port=4002, clientId=1, timeout=15)\n  File \"/usr/local/lib/python3.9/site-packages/ib_insync/ib.py\", line 1748, in connectAsync\n    await self.client.connectAsync(host, port, clientId, timeout)\n  File \"/usr/local/lib/python3.9/site-packages/ib_insync/client.py\", line 211, in connectAsync\n    await asyncio.wait_for(self.conn.connectAsync(host, port), timeout)\n  File \"/usr/local/lib/python3.9/asyncio/tasks.py\", line 479, in wait_for\n    return fut.result()\n  File \"/usr/local/lib/python3.9/site-packages/ib_insync/connection.py\", line 39, in connectAsync\n    self.transport, _ = await loop.create_connection(\n  File \"/usr/local/lib/python3.9/asyncio/base_events.py\", line 1065, in create_connection\n    raise exceptions[0]\n  File \"/usr/local/lib/python3.9/asyncio/base_events.py\", line 1050, in create_connection\n    sock = await self._connect_sock(\n  File \"/usr/local/lib/python3.9/asyncio/base_events.py\", line 961, in _connect_sock\n    await self.sock_connect(sock, address)\n  File \"/usr/local/lib/python3.9/asyncio/selector_events.py\", line 500, in sock_connect\n    return await fut\n  File \"/usr/local/lib/python3.9/asyncio/selector_events.py\", line 535, in _sock_connect_cb\n    raise OSError(err, f'Connect call failed {address}')\nConnectionRefusedError: [Errno 111] Connect call failed ('127.0.0.1', 4002)",
+    "timestamp": "2025-10-31T17:11:30.104866Z"
+  },
+  {
+    "insertId": "6904edc200019978dc752e47",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:11:30.311759331Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "CRITICAL:root:IB Thread (Outer Loop): Critical error: [Errno 111] Connect call failed ('127.0.0.1', 4002)",
+    "timestamp": "2025-10-31T17:11:30.104824Z"
+  },
+  {
+    "insertId": "6904edc2000013a1db3acf4c",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:11:30.311759331Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "ERROR:ib_insync.client:Make sure API port on TWS/IBG is open",
+    "timestamp": "2025-10-31T17:11:30.005025Z"
+  },
+  {
+    "insertId": "6904edc200001365b7b4e887",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:11:30.311759331Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "ERROR:ib_insync.client:API connection failed: ConnectionRefusedError(111, \"Connect call failed ('127.0.0.1', 4002)\")",
+    "timestamp": "2025-10-31T17:11:30.004965Z"
+  },
+  {
+    "insertId": "6904edc2000012e4ffd48036",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:11:30.311759331Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:ib_insync.client:Disconnecting",
+    "timestamp": "2025-10-31T17:11:30.004836Z"
+  },
+  {
+    "insertId": "6904edc10004ac50d4ff4298",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:11:29.312096218Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:ib_insync.client:Connecting to 127.0.0.1:4002 with clientId 1...",
+    "timestamp": "2025-10-31T17:11:29.306256Z"
+  },
+  {
+    "insertId": "6904edc10004ac070eb81d4d",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:11:29.312096218Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:root:IB Thread (Outer Loop): Attempting to connect...",
+    "timestamp": "2025-10-31T17:11:29.306183Z"
+  },
+  {
+    "insertId": "6904edb20004a75ed7bb06a2",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:11:14.444728269Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:root:IB Thread (Outer Loop): Disconnected. Attempting reconnection in 15 seconds...",
+    "timestamp": "2025-10-31T17:11:14.304990Z"
+  },
+  {
+    "errorGroups": [
+      {
+        "id": "CKmi2fSZsby2tgE"
+      }
+    ],
+    "insertId": "6904edb20004a6d2bf9850dd",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:11:14.444728269Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "textPayload": "Traceback (most recent call last):\n  File \"/home/app/main.py\", line 42, in resilient_main_logic\n    await env.ibgw.connectAsync(host='127.0.0.1', port=4002, clientId=1, timeout=15)\n  File \"/usr/local/lib/python3.9/site-packages/ib_insync/ib.py\", line 1748, in connectAsync\n    await self.client.connectAsync(host, port, clientId, timeout)\n  File \"/usr/local/lib/python3.9/site-packages/ib_insync/client.py\", line 211, in connectAsync\n    await asyncio.wait_for(self.conn.connectAsync(host, port), timeout)\n  File \"/usr/local/lib/python3.9/asyncio/tasks.py\", line 479, in wait_for\n    return fut.result()\n  File \"/usr/local/lib/python3.9/site-packages/ib_insync/connection.py\", line 39, in connectAsync\n    self.transport, _ = await loop.create_connection(\n  File \"/usr/local/lib/python3.9/asyncio/base_events.py\", line 1065, in create_connection\n    raise exceptions[0]\n  File \"/usr/local/lib/python3.9/asyncio/base_events.py\", line 1050, in create_connection\n    sock = await self._connect_sock(\n  File \"/usr/local/lib/python3.9/asyncio/base_events.py\", line 961, in _connect_sock\n    await self.sock_connect(sock, address)\n  File \"/usr/local/lib/python3.9/asyncio/selector_events.py\", line 500, in sock_connect\n    return await fut\n  File \"/usr/local/lib/python3.9/asyncio/selector_events.py\", line 535, in _sock_connect_cb\n    raise OSError(err, f'Connect call failed {address}')\nConnectionRefusedError: [Errno 111] Connect call failed ('127.0.0.1', 4002)",
+    "timestamp": "2025-10-31T17:11:14.304850Z"
+  },
+  {
+    "insertId": "6904edb20004a69922bfe19d",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:11:14.444728269Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "CRITICAL:root:IB Thread (Outer Loop): Critical error: [Errno 111] Connect call failed ('127.0.0.1', 4002)",
+    "timestamp": "2025-10-31T17:11:14.304793Z"
+  },
+  {
+    "insertId": "6904edb200033f98ab931964",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:11:14.444728269Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "ERROR:ib_insync.client:Make sure API port on TWS/IBG is open",
+    "timestamp": "2025-10-31T17:11:14.212888Z"
+  },
+  {
+    "insertId": "6904edb200033f479ed3c406",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:11:14.444728269Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "ERROR:ib_insync.client:API connection failed: ConnectionRefusedError(111, \"Connect call failed ('127.0.0.1', 4002)\")",
+    "timestamp": "2025-10-31T17:11:14.212807Z"
+  },
+  {
+    "insertId": "6904edb20001a51871a98567",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:11:14.444728269Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:ib_insync.client:Disconnecting",
+    "timestamp": "2025-10-31T17:11:14.107800Z"
+  },
+  {
+    "insertId": "6904edb20001a1bb7067d298",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:11:14.444728269Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:ib_insync.client:Connecting to 127.0.0.1:4002 with clientId 1...",
+    "timestamp": "2025-10-31T17:11:14.106939Z"
+  },
+  {
+    "insertId": "6904edb20001a1290bb355dc",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:11:14.113883193Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:root:IB Thread (Outer Loop): Attempting to connect...",
+    "timestamp": "2025-10-31T17:11:14.106793Z"
+  },
+  {
+    "insertId": "xwjug7f9vaxqq",
+    "labels": {
+      "activity_type_name": "ViolationAutoResolveEventv1",
+      "policy_display_name": "cloud-run-service-5xx",
+      "policy_id": "6987159120860029494",
+      "resolved_at": "1761930665",
+      "resource_name": "gold-gearbox-424413-k1 Cloud Run Revision labels {project_id=gold-gearbox-424413-k1, service_name=ib-paper, revision_name=ib-paper-00136-66h, location=asia-east1, configuration_name=ib-paper}",
+      "terse_message": "Request Count for gold-gearbox-424413-k1 Cloud Run Revision labels {project_id=gold-gearbox-424413-k1, service_name=ib-paper, revision_name=ib-paper-00136-66h, location=asia-east1, configuration_name=ib-paper} with metric labels {response_code=500} returned to normal with a value of 0.000.",
+      "verbose_message": "Request Count for gold-gearbox-424413-k1 Cloud Run Revision labels {project_id=gold-gearbox-424413-k1, service_name=ib-paper, revision_name=ib-paper-00136-66h, location=asia-east1, configuration_name=ib-paper} with metric labels {response_code=500} returned to normal with a value of 0.000.",
+      "violation_id": "0.nyzy9orlkq2m"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/monitoring.googleapis.com%2FViolationAutoResolveEventv1",
+    "receiveTimestamp": "2025-10-31T17:11:05.681796877Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "asia-east1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00136-66h",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "timestamp": "2025-10-31T17:11:05Z"
+  },
+  {
+    "insertId": "6904eda300021a5f627c5191",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:10:59.180373054Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:root:IB Thread (Outer Loop): Disconnected. Attempting reconnection in 15 seconds...",
+    "timestamp": "2025-10-31T17:10:59.137823Z"
+  },
+  {
+    "errorGroups": [
+      {
+        "id": "CKmi2fSZsby2tgE"
+      }
+    ],
+    "insertId": "6904eda300021a560a07da49",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:10:59.180373054Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "textPayload": "Traceback (most recent call last):\n  File \"/home/app/main.py\", line 42, in resilient_main_logic\n    await env.ibgw.connectAsync(host='127.0.0.1', port=4002, clientId=1, timeout=15)\n  File \"/usr/local/lib/python3.9/site-packages/ib_insync/ib.py\", line 1748, in connectAsync\n    await self.client.connectAsync(host, port, clientId, timeout)\n  File \"/usr/local/lib/python3.9/site-packages/ib_insync/client.py\", line 211, in connectAsync\n    await asyncio.wait_for(self.conn.connectAsync(host, port), timeout)\n  File \"/usr/local/lib/python3.9/asyncio/tasks.py\", line 479, in wait_for\n    return fut.result()\n  File \"/usr/local/lib/python3.9/site-packages/ib_insync/connection.py\", line 39, in connectAsync\n    self.transport, _ = await loop.create_connection(\n  File \"/usr/local/lib/python3.9/asyncio/base_events.py\", line 1065, in create_connection\n    raise exceptions[0]\n  File \"/usr/local/lib/python3.9/asyncio/base_events.py\", line 1050, in create_connection\n    sock = await self._connect_sock(\n  File \"/usr/local/lib/python3.9/asyncio/base_events.py\", line 961, in _connect_sock\n    await self.sock_connect(sock, address)\n  File \"/usr/local/lib/python3.9/asyncio/selector_events.py\", line 500, in sock_connect\n    return await fut\n  File \"/usr/local/lib/python3.9/asyncio/selector_events.py\", line 535, in _sock_connect_cb\n    raise OSError(err, f'Connect call failed {address}')\nConnectionRefusedError: [Errno 111] Connect call failed ('127.0.0.1', 4002)",
+    "timestamp": "2025-10-31T17:10:59.137814Z"
+  },
+  {
+    "insertId": "6904eda300021928ef505111",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:10:59.180373054Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "CRITICAL:root:IB Thread (Outer Loop): Critical error: [Errno 111] Connect call failed ('127.0.0.1', 4002)",
+    "timestamp": "2025-10-31T17:10:59.137512Z"
+  },
+  {
+    "insertId": "6904eda30002191b81befbf5",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:10:59.180373054Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "ERROR:ib_insync.client:Make sure API port on TWS/IBG is open",
+    "timestamp": "2025-10-31T17:10:59.137499Z"
+  },
+  {
+    "insertId": "6904eda2000dce762a0d5002",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:10:59.180373054Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "ERROR:ib_insync.client:API connection failed: ConnectionRefusedError(111, \"Connect call failed ('127.0.0.1', 4002)\")",
+    "timestamp": "2025-10-31T17:10:58.904822Z"
+  },
+  {
+    "insertId": "6904eda2000dccb368048337",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:10:59.180373054Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:ib_insync.client:Disconnecting",
+    "timestamp": "2025-10-31T17:10:58.904371Z"
+  },
+  {
+    "insertId": "6904eda20007ba986275644e",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:10:58.512907574Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:ib_insync.client:Connecting to 127.0.0.1:4002 with clientId 1...",
+    "timestamp": "2025-10-31T17:10:58.506520Z"
+  },
+  {
+    "insertId": "6904eda20007ba3612174886",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:10:58.512907574Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:root:IB Thread (Outer Loop): Attempting to connect...",
+    "timestamp": "2025-10-31T17:10:58.506422Z"
+  },
+  {
+    "insertId": "6904ed930007b475ac7e97be",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:10:43.745112478Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:root:IB Thread (Outer Loop): Disconnected. Attempting reconnection in 15 seconds...",
+    "timestamp": "2025-10-31T17:10:43.504949Z"
+  },
+  {
+    "errorGroups": [
+      {
+        "id": "CKmi2fSZsby2tgE"
+      }
+    ],
+    "insertId": "6904ed930007b3972ebd2929",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:10:43.745112478Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "textPayload": "Traceback (most recent call last):\n  File \"/home/app/main.py\", line 42, in resilient_main_logic\n    await env.ibgw.connectAsync(host='127.0.0.1', port=4002, clientId=1, timeout=15)\n  File \"/usr/local/lib/python3.9/site-packages/ib_insync/ib.py\", line 1748, in connectAsync\n    await self.client.connectAsync(host, port, clientId, timeout)\n  File \"/usr/local/lib/python3.9/site-packages/ib_insync/client.py\", line 211, in connectAsync\n    await asyncio.wait_for(self.conn.connectAsync(host, port), timeout)\n  File \"/usr/local/lib/python3.9/asyncio/tasks.py\", line 479, in wait_for\n    return fut.result()\n  File \"/usr/local/lib/python3.9/site-packages/ib_insync/connection.py\", line 39, in connectAsync\n    self.transport, _ = await loop.create_connection(\n  File \"/usr/local/lib/python3.9/asyncio/base_events.py\", line 1065, in create_connection\n    raise exceptions[0]\n  File \"/usr/local/lib/python3.9/asyncio/base_events.py\", line 1050, in create_connection\n    sock = await self._connect_sock(\n  File \"/usr/local/lib/python3.9/asyncio/base_events.py\", line 961, in _connect_sock\n    await self.sock_connect(sock, address)\n  File \"/usr/local/lib/python3.9/asyncio/selector_events.py\", line 500, in sock_connect\n    return await fut\n  File \"/usr/local/lib/python3.9/asyncio/selector_events.py\", line 535, in _sock_connect_cb\n    raise OSError(err, f'Connect call failed {address}')\nConnectionRefusedError: [Errno 111] Connect call failed ('127.0.0.1', 4002)",
+    "timestamp": "2025-10-31T17:10:43.504727Z"
+  },
+  {
+    "insertId": "6904ed930007b36f761b8bcb",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:10:43.745112478Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "CRITICAL:root:IB Thread (Outer Loop): Critical error: [Errno 111] Connect call failed ('127.0.0.1', 4002)",
+    "timestamp": "2025-10-31T17:10:43.504687Z"
+  },
+  {
+    "insertId": "6904ed930006378b2c552811",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:10:43.745112478Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "ERROR:ib_insync.client:Make sure API port on TWS/IBG is open",
+    "timestamp": "2025-10-31T17:10:43.407435Z"
+  },
+  {
+    "insertId": "6904ed93000637446882d5d8",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:10:43.745112478Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "ERROR:ib_insync.client:API connection failed: ConnectionRefusedError(111, \"Connect call failed ('127.0.0.1', 4002)\")",
+    "timestamp": "2025-10-31T17:10:43.407364Z"
+  },
+  {
+    "insertId": "6904ed93000636db8c430c71",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:10:43.745112478Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:ib_insync.client:Disconnecting",
+    "timestamp": "2025-10-31T17:10:43.407259Z"
+  },
+  {
+    "insertId": "6904ed93000633d46c58dcb1",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:10:43.414673487Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:ib_insync.client:Connecting to 127.0.0.1:4002 with clientId 1...",
+    "timestamp": "2025-10-31T17:10:43.406484Z"
+  },
+  {
+    "insertId": "6904ed930006338be08f2473",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:10:43.414673487Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:root:IB Thread (Outer Loop): Attempting to connect...",
+    "timestamp": "2025-10-31T17:10:43.406411Z"
+  },
+  {
+    "insertId": "6904ed8400062d3e367a694e",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:10:28.646214375Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:root:IB Thread (Outer Loop): Disconnected. Attempting reconnection in 15 seconds...",
+    "timestamp": "2025-10-31T17:10:28.404798Z"
+  },
+  {
+    "errorGroups": [
+      {
+        "id": "CKmi2fSZsby2tgE"
+      }
+    ],
+    "insertId": "6904ed8400062ce52cccc75c",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:10:28.646214375Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "textPayload": "Traceback (most recent call last):\n  File \"/home/app/main.py\", line 42, in resilient_main_logic\n    await env.ibgw.connectAsync(host='127.0.0.1', port=4002, clientId=1, timeout=15)\n  File \"/usr/local/lib/python3.9/site-packages/ib_insync/ib.py\", line 1748, in connectAsync\n    await self.client.connectAsync(host, port, clientId, timeout)\n  File \"/usr/local/lib/python3.9/site-packages/ib_insync/client.py\", line 211, in connectAsync\n    await asyncio.wait_for(self.conn.connectAsync(host, port), timeout)\n  File \"/usr/local/lib/python3.9/asyncio/tasks.py\", line 479, in wait_for\n    return fut.result()\n  File \"/usr/local/lib/python3.9/site-packages/ib_insync/connection.py\", line 39, in connectAsync\n    self.transport, _ = await loop.create_connection(\n  File \"/usr/local/lib/python3.9/asyncio/base_events.py\", line 1065, in create_connection\n    raise exceptions[0]\n  File \"/usr/local/lib/python3.9/asyncio/base_events.py\", line 1050, in create_connection\n    sock = await self._connect_sock(\n  File \"/usr/local/lib/python3.9/asyncio/base_events.py\", line 961, in _connect_sock\n    await self.sock_connect(sock, address)\n  File \"/usr/local/lib/python3.9/asyncio/selector_events.py\", line 500, in sock_connect\n    return await fut\n  File \"/usr/local/lib/python3.9/asyncio/selector_events.py\", line 535, in _sock_connect_cb\n    raise OSError(err, f'Connect call failed {address}')\nConnectionRefusedError: [Errno 111] Connect call failed ('127.0.0.1', 4002)",
+    "timestamp": "2025-10-31T17:10:28.404709Z"
+  },
+  {
+    "insertId": "6904ed8400062cbdad43c248",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:10:28.646214375Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "CRITICAL:root:IB Thread (Outer Loop): Critical error: [Errno 111] Connect call failed ('127.0.0.1', 4002)",
+    "timestamp": "2025-10-31T17:10:28.404669Z"
+  },
+  {
+    "insertId": "6904ed840004b1d46f161782",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:10:28.646214375Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "ERROR:ib_insync.client:Make sure API port on TWS/IBG is open",
+    "timestamp": "2025-10-31T17:10:28.307668Z"
+  },
+  {
+    "insertId": "6904ed840004b1955d0b2e67",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:10:28.646214375Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "ERROR:ib_insync.client:API connection failed: ConnectionRefusedError(111, \"Connect call failed ('127.0.0.1', 4002)\")",
+    "timestamp": "2025-10-31T17:10:28.307605Z"
+  },
+  {
+    "insertId": "6904ed840004b12ac855294b",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:10:28.646214375Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:ib_insync.client:Disconnecting",
+    "timestamp": "2025-10-31T17:10:28.307498Z"
+  },
+  {
+    "insertId": "6904ed840004ae4d1bfa900c",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:10:28.310954913Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:ib_insync.client:Connecting to 127.0.0.1:4002 with clientId 1...",
+    "timestamp": "2025-10-31T17:10:28.306765Z"
+  },
+  {
+    "insertId": "6904ed840004ae2252d3e059",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:10:28.310954913Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:root:IB Thread (Outer Loop): Attempting to connect...",
+    "timestamp": "2025-10-31T17:10:28.306722Z"
+  },
+  {
+    "insertId": "6904ed750004a7843eadc9e4",
+    "labels": {
+      "instanceId": "00147782966593b7fb82c7958df0c85ff60bba3b1722efbc47ae549e83e3481a5153b1f87240eaa4ec4cda02417933020e251368913df21dc1a4b35349dd8a7da8a4edf455f5f8e563f2769ca612"
+    },
+    "logName": "projects/gold-gearbox-424413-k1/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-10-31T17:10:13.343548141Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "ib-paper",
+        "location": "us-central1",
+        "project_id": "gold-gearbox-424413-k1",
+        "revision_name": "ib-paper-00001-xgt",
+        "service_name": "ib-paper"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:root:IB Thread (Outer Loop): Disconnected. Attempting reconnection in 15 seconds...",
+    "timestamp": "2025-10-31T17:10:13.305028Z"
+  }
+]

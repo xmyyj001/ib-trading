@@ -130,7 +130,7 @@ Cloud Build 的 `Deploy-to-Cloud-Run` 步骤会自动发布新修订。完成后
    ```bash
    gcloud logging read \
      "resource.type=cloud_run_revision AND resource.labels.service_name=${CLOUD_RUN_SERVICE_NAME}" \
-     --limit=50 --freshness=1h --format="json"
+     --limit=50 --freshness=1h --format="json" >logging50.txt
    ```
 2. **Dry-Run 调用**：使用 Cloud Shell 或本地 `curl` 触发 orchestrator。
    ```bash

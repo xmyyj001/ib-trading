@@ -42,3 +42,7 @@
 9. **Orchestrator Exposure Migration (2025-10-29 14:20 UTC)**  
    - User requested follow-up actions after completing the new orchestration plan.  
    - Assistant generated Firestore migration script instructions (rename `spymacdvixy` → `spy_macd_vixy`), outlined Commander verification via `verify_trading.py`, and updated `• Implementation Plan.md` with deployment/testing steps.
+
+10. **Cloud Run Deployment (2025-10-31 16:58 UTC)**  
+    - Rebuilt base/application images with corrected Cloud Build substitutions and deployed revision `ib-paper-00001-xgt` to `us-central1`.  
+    - Post-deploy logs show IB Gateway connection refused at `127.0.0.1:4002`; orchestrator dry-run deferred until gateway connectivity is restored.
