@@ -84,6 +84,18 @@ class FakePortfolioDocument:
         return self._data
 
 
+class FakePositionsCollection:
+    def __init__(self, trading_mode, portfolio):
+        self._trading_mode = trading_mode
+        self._portfolio = portfolio
+
+    def document(self, name):
+        if name != self._trading_mode:
+            raise ValueError(f"Unsupported positions document: {name}")
+        path = f'positions/{name}'
+        return FakePortfolioDocument(path, {'latest_portfolio': self._portfolio})
+
+
 class FakeDB:
     def __init__(self, portfolio, strategy_docs, execution_sink, trading_mode='paper'):
         self._portfolio = portfolio
@@ -101,6 +113,8 @@ class FakeDB:
             return FakeStrategyCollection(self._strategy_docs)
         if name == 'executions':
             return FakeExecutionsCollection(self._execution_sink)
+        if name == 'positions':
+            return FakePositionsCollection(self._trading_mode, self._portfolio)
         raise ValueError(f"Unsupported collection: {name}")
 
 

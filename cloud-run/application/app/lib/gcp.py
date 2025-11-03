@@ -9,25 +9,41 @@ from os import environ
 
 from google.cloud import bigquery, firestore_v1 as firestore, logging as gcp_logging, secretmanager_v1 as secretmanager
 
-# Set up Cloud Logging robustly
-try:
-    gcp_project_id = environ.get('PROJECT_ID')
-    if not gcp_project_id:
-        # This will work in most GCP environments like Cloud Run, Cloud Functions
-        import google.auth
-        _, gcp_project_id = google.auth.default()
-    
-    gcp_logging_client = gcp_logging.Client(project=gcp_project_id)
-    handler = gcp_logging_client.get_default_handler()
-    logger = logging.getLogger('cloudLogger')
-except (ImportError, google.auth.exceptions.DefaultCredentialsError, Exception):
-    # Fallback for local development or environments without default credentials
-    handler = logging.StreamHandler()
-    logger = logging.getLogger(__name__)
 
-logger.addHandler(handler)
-logger.setLevel(logging.DEBUG)
-logger.propagate = False
+def _resolve_logging_channel():
+    """
+    Ensure the module logger always has a concrete handler even when
+    Google Cloud clients are mocked out in unit tests.
+    """
+    try:
+        gcp_project_id = environ.get('PROJECT_ID')
+        if not gcp_project_id:
+            import google.auth
+            _, gcp_project_id = google.auth.default()
+
+        gcp_logging_client = gcp_logging.Client(project=gcp_project_id)
+        candidate = gcp_logging_client.get_default_handler()
+        if not isinstance(candidate, logging.Handler):
+            raise TypeError("Mocked handler is not a logging.Handler instance")
+        handler = candidate
+        logger_name = 'cloudLogger'
+    except Exception:
+        handler = logging.StreamHandler()
+        logger_name = __name__
+
+    logger = logging.getLogger(logger_name)
+    if not logger.handlers:
+        logger.addHandler(handler)
+    else:
+        # On retries, ensure existing handler is usable; replace if needed.
+        if not any(isinstance(h, logging.Handler) for h in logger.handlers):
+            logger.handlers = [handler]
+    logger.setLevel(logging.DEBUG)
+    logger.propagate = False
+    return logger
+
+
+logger = _resolve_logging_channel()
 
 
 class GcpModule:
