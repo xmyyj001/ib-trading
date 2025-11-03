@@ -52,3 +52,8 @@
     - Assistant upgraded the base Dockerfile to Python 3.11 and refreshed Cloud Build configs; instructed rebuilding base/application images and redeploying.  
     - After redeploy, orchestrator calls returned contract serialization errors because `ib_insync.util.contractToDict` was removed. Added `lib/ib_serialization.py` with a replacement helper, rewired strategies and reconcile intent, and switched Firestore persistence to embed `latest_portfolio` under `positions/{mode}` to satisfy path validation.  
     - Updated `Allocation` intent, unit tests, and `verify_trading.py` to read the new snapshot shape; latest dry-run shows `spy_macd_vixy` succeeding while `testsignalgenerator` still needs business logic follow-up.
+
+12. **Root Endpoint Routing & Gateway Recovery (2025-11-03 14:15 UTC)**  
+    - FastAPI now exposes `GET /` status plus `POST /` proxying to the orchestrator intent to eliminate Cloud Run 404s when automation calls the base URL.  
+    - Replaced lingering `ib_insync.util.contractToDict` usage with a local serializer that supports `__slots__`, refreshed strategy Firestore writes to use collection/document chains, and hardened GCP logging stubs so unit tests pass without real handlers.  
+    - Adjusted `handle_intent` to translate IB reconnection failures into HTTP 503, re-ran unit tests, and validated Cloud Run after rebuilds using `curl`, `gcloud logging read`, and `verify_trading.py`; service now returns 200 with both strategies succeeding once the IB Gateway restarts cleanly.

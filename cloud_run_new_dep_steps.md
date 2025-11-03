@@ -101,7 +101,8 @@
 
 2. **记录构建版本**：留存 `BUILD_ID` 与镜像 tag，方便回滚。  
    ```bash
-   gcloud builds describe ${BUILD_ID} \
+   #  # ${BUILD_ID} \
+   gcloud builds describe b6ef97a3-a5eb-43bd-a790-9393ce187c2b \
    --region=us-central1 \
    --format='value(images[0])'
    ```
@@ -136,13 +137,18 @@ Cloud Build 的 `Deploy-to-Cloud-Run` 步骤会自动发布新修订。完成后
    ```
 2. **Dry-Run 调用**：使用 Cloud Shell 或本地 `curl` 触发 orchestrator。
    ```bash
-    unset ORCHESTRATOR_URL
+   unset ORCHESTRATOR_URL
    export ORCHESTRATOR_URL="https://ib-paper-599151217267.us-central1.run.app"
-
+      # 直接向 orchestrator 发送一次交易请求，重点是拿到响应中的 JSON 数据（策略状态、reconcile、commander 输出等），便于验证业务逻辑是否正常。
    curl -X POST "${ORCHESTRATOR_URL}" \
      -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
      -H "Content-Type: application/json" \
      -d '{"strategies":["testsignalgenerator","spy_macd_vixy"],"dryRun":true,"runReconcile":true}'
+      # 加了 -i，会把 HTTP 响应头一起打印出来，用来确认状态码（200/503/500 等）、日期、Content-Type 等诊断信息，便于判断是业务失败还是网关未连上。
+   curl -i -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
+      -H "Content-Type: application/json" \
+      -d '{"strategies":["testsignalgenerator","spy_macd_vixy"],"dryRun":true,"runReconcile":true}' \
+      "${ORCHESTRATOR_URL}/"
    ```
 
    * check running details:
@@ -156,13 +162,35 @@ Cloud Build 的 `Deploy-to-Cloud-Run` 步骤会自动发布新修订。完成后
 3. **Firestore 快照检查**（使用 `verify_trading.py` 或 `gcloud firestore`）  
    * 运行 `python verify_trading.py --mode paper`；输出应显示非零 `net_liquidation` 与最新 `updated_at`。  
    * 在 Firestore 控制台确认 `strategies/spy_macd_vixy/intent/latest` 与 `positions/paper/latest_portfolio` 已生成并刷新时间戳。
-
+```
+python verify_trading.py  --show-intents --project-id gold-gearbox-424413-k1 --strategies testsignalgenerator spy_macd_vixy 
+```
 4. **Scheduler 验证**（如已配置）  
    ```bash
    gcloud scheduler jobs run daily-strategy-orchestrator --location=${GCP_REGION}
    gcloud scheduler jobs describe daily-strategy-orchestrator --location=${GCP_REGION}
    ```
+   ```bash #setting
+   ORCHESTRATOR_URL="https://ib-paper-599151217267.us-central1.run.app"
+   SERVICE_ACCOUNT="ib-trading@gold-gearbox-424413-k1.iam.gserviceaccount.com"
 
+   # 执行修正后的命令
+   gcloud scheduler jobs create http orchestrator-daily-run \
+   --project=gold-gearbox-424413-k1 \
+   --location=us-central1 \
+   --schedule="15 16 * * 1-5" \
+   --time-zone="America/New_York" \
+   --uri="${ORCHESTRATOR_URL}/" \
+   --http-method=POST \
+   --headers="Content-Type=application/json" \
+   --message-body='{"strategies":["testsignalgenerator","spy_macd_vixy"],"dryRun":false,"runReconcile":true}' \
+   --oidc-service-account-email="${SERVICE_ACCOUNT}" \
+   --oidc-token-audience="${ORCHESTRATOR_URL}"
+      # 创建后可用 做一次手动触发验证。
+       gcloud scheduler jobs run orchestrator-daily-run \
+       --project=gold-gearbox-424413-k1 \
+      --location=us-central1 
+   ```
 ## 8. 回滚策略
 
 1. **快速回滚**：将 Cloud Run 服务流量切回上一修订。

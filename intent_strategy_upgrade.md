@@ -256,3 +256,40 @@ graph TD
    * 为生产账号创建独立 Cloud Run 修订，先以 `dryRun=true` 执行 1-2 个交易日，验证审计文档与日志。  
    * 切换 Cloud Scheduler 至 orchestrator 端点，同时保留旧的 `testsignalgenerator` 调度作为回滚手段。  
    * 一旦 Commander 输出稳定，再逐步将其他策略迁移到新的意图模型，最后停用旧意图。
+
+
+
+附：定时作业的作用描述
+  - 这个 orchestrator-daily-run 定时任务每个交易日触发一次 Cloud Run 根路径 /，请求体 {strategies:
+    ["testsignalgenerator","spy_macd_vixy"],dryRun:true,runReconcile:true}。它将 intent_strategy_upgrade.md 里描述的三步流水线（策略 → 对账
+    → Commander）串在一次 HTTP 调用内完成，取代旧时代分别调用 /testsignalgenerator、/reconcile、/allocation 的多个 Scheduler 作业。
+
+  如何区分三大组件的执行结果
+
+  1. 策略意图（Strategy Intents）
+      - Cloud Run 日志里会先看到 --- Starting Robust, Target-Aware Signal Generator ---、Fetch 5D/30min... 这样的 INFO 行。
+      - Firestore 路径 strategies/<id>/intent/latest 会更新 updated_at、status、target_positions。
+      - verify_trading.py --show-intents 会在 “Strategy Breakdown” 段落列出每个策略的执行时间与目标仓位。
+  2. 对账意图（Reconcile）
+      - 日志出现 Starting portfolio reconciliation against IB Gateway... 以及多条 ib_insync.wrapper:position / updatePortfolio 输出。
+      - Firestore 文档 positions/paper/latest_portfolio 被覆盖，含实时 holdings、open_orders、net_liquidation。可从控制台或 gcloud firestore
+        documents describe 查看。
+  3. 总指挥（Commander / Allocation）
+      - 日志记录 Planned X orders; simulated Y、orders 等信息。
+      - Firestore executions/{auto_id} 新增一条执行日志（字段 decision.diff、orders 等）。
+      - verify_trading.py 输出 “Commander” 段落，列出 dry-run 结果与计划订单。
+
+  推荐操作流程
+
+  1. 安排作业执行后，先用
+
+     gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="ib-paper"' \
+       --project=gold-gearbox-424413-k1 --freshness=10m --format="value(timestamp,textPayload)"
+     快速确认三段日志是否依次出现。
+     快速确认三段日志是否依次出现。
+  2. 打开 Firestore Console 或脚本读取上述三个路径，验证数据刷新时间。
+  3. 如需人工复核，运行：
+
+     python verify_trading.py --show-intents --project-id gold-gearbox-424413-k1 --strategies testsignalgenerator spy_macd_vixy
+
+     对照输出中 “策略” / “Commander” 段落是否与日志一致。

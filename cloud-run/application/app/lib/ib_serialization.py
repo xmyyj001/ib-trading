@@ -6,6 +6,8 @@ persisted in Firestore or logged safely.
 from dataclasses import fields, is_dataclass
 from typing import Any, Dict
 
+from ib_insync import Contract
+
 
 def _prune_empty(value: Any) -> Any:
     """Recursively prune empty / None values to keep documents compact."""
@@ -63,3 +65,21 @@ def contract_to_dict(contract: Any) -> Dict[str, Any]:
         if value not in (None, {}, [], ""):
             normalized[key] = value
     return normalized
+
+
+def dict_to_contract(data: Dict[str, Any]) -> Contract:
+    """
+    Reconstruct an ``ib_insync.Contract`` (or compatible subclass) from a dict
+    previously produced by :func:`contract_to_dict`.
+    """
+    contract = Contract()
+    if not data:
+        return contract
+
+    for key, value in data.items():
+        try:
+            setattr(contract, key, value)
+        except (AttributeError, TypeError):
+            # Ignore attributes that cannot be set on the base contract
+            continue
+    return contract

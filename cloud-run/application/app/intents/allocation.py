@@ -2,7 +2,8 @@ import asyncio
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
-from ib_insync import MarketOrder, util
+from ib_insync import MarketOrder
+from lib.ib_serialization import dict_to_contract
 
 from intents.intent import Intent
 
@@ -132,7 +133,7 @@ class Allocation(Intent):
         orders_placed: List[Dict[str, Any]] = []
         if not self._dry_run:
             for plan in order_plan:
-                contract = util.dictToContract(plan['contract'])
+                contract = dict_to_contract(plan['contract'])
                 if contract.conId is None:
                     qualified = await self._env.ibgw.qualifyContractsAsync(contract)
                     if qualified:
