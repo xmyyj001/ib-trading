@@ -25,7 +25,12 @@ class TestSignalGenerator(Intent):
 
     async def _core_async(self):
         self._env.logging.info("--- Starting Robust, Target-Aware Signal Generator ---")
-        doc_ref = self._env.db.document(f"strategies/{self.id}/intent/latest")
+        doc_ref = (
+            self._env.db.collection("strategies")
+            .document(self.id)
+            .collection("intent")
+            .document("latest")
+        )
 
         try:
             spy_obj = Stock('SPY', 'SMART', 'USD')

@@ -82,7 +82,12 @@ class SpyMacdVixyIntent(Intent):
         self._dry_run = kwargs.get('dryRun', False)
 
     async def _core_async(self) -> Dict[str, Any]:
-        doc_ref = self._env.db.document(f"strategies/{self.id}/intent/latest")
+        doc_ref = (
+            self._env.db.collection("strategies")
+            .document(self.id)
+            .collection("intent")
+            .document("latest")
+        )
         now_iso = datetime.now(timezone.utc).isoformat()
         try:
             spy_contract = await self._qualify_stock('SPY', 'SMART', 'USD')

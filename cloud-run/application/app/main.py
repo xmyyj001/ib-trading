@@ -114,6 +114,21 @@ INTENTS = {
     'orchestrator': Orchestrator
 }
 
+@app.get("/")
+async def root_status():
+    """Lightweight status endpoint for health checks."""
+    return {
+        'status': 'ok',
+        'registered_intents': sorted(INTENTS.keys())
+    }
+
+
+@app.post("/")
+async def orchestrator_entrypoint(request: Request):
+    """Backward-compatible entrypoint that proxies to the orchestrator intent."""
+    return await handle_intent('orchestrator', request)
+
+
 @app.get("/{intent}")
 @app.post("/{intent}")
 async def handle_intent(intent: str, request: Request):

@@ -3,10 +3,8 @@ Utilities for normalizing Interactive Brokers dataclasses so they can be
 persisted in Firestore or logged safely.
 """
 
-from dataclasses import asdict, is_dataclass
+from dataclasses import fields, is_dataclass
 from typing import Any, Dict
-
-from ib_insync import util
 
 
 def _prune_empty(value: Any) -> Any:
@@ -27,21 +25,37 @@ def contract_to_dict(contract: Any) -> Dict[str, Any]:
     Serialize an ``ib_insync`` contract (or nested dataclasses) into a dict.
 
     ``ib_insync.util.contractToDict`` was removed in recent releases, so we
-    emulate the old behaviour via ``dataclassAsDict`` while pruning empty fields.
+    emulate the behaviour locally without depending on ``ib_insync`` internals.
     """
     if not contract:
         return {}
 
-    if is_dataclass(contract):
-        data = util.dataclassAsDict(contract)
-    elif hasattr(contract, "__dict__"):
-        data = {k: getattr(contract, k) for k in dir(contract) if not k.startswith("_")}
-    else:
-        # Fallback: try dataclasses.asdict for unknown containers.
-        try:
-            data = asdict(contract)  # type: ignore[arg-type]
-        except TypeError:
-            return {"value": contract}
+    def _to_mapping(obj: Any) -> Dict[str, Any]:
+        if is_dataclass(obj):
+            # Extract dataclass fields explicitly to avoid util.dataclassAsDict.
+            return {field.name: getattr(obj, field.name) for field in fields(obj)}
+        if isinstance(obj, dict):
+            return obj
+        if hasattr(obj, "__dict__"):
+            return {
+                key: getattr(obj, key)
+                for key in obj.__dict__
+                if not key.startswith("_")
+            }
+        if hasattr(obj, "__slots__"):
+            mapping = {}
+            for slot in obj.__slots__:
+                if slot.startswith("_"):
+                    continue
+                try:
+                    mapping[slot] = getattr(obj, slot)
+                except AttributeError:
+                    continue
+            if mapping:
+                return mapping
+        return {"value": obj}
+
+    data = _to_mapping(contract)
 
     normalized: Dict[str, Any] = {}
     for key, raw in data.items():
