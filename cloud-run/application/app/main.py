@@ -157,7 +157,10 @@ async def handle_intent(intent: str, request: Request):
     
     if error_str:
         result = {'error': error_str}
-        status_code = 500
+        if 'ConnectionError' in error_str or 'connect' in error_str.lower():
+            status_code = 503
+        else:
+            status_code = 500
     else:
         result = result_data
         status_code = 200
