@@ -27,8 +27,20 @@ from strategies.test_signal_generator import TestSignalGenerator
 from lib.environment import Environment
 
 # --- 1. Thread Communication Setup ---
-request_queue = Queue(maxsize=1)
+request_queue = Queue(maxsize=4)
 results = {}
+
+
+def _drop_pending_request(queue: Queue, request_id: str) -> None:
+    """Remove a pending request from the queue if it timed out before dispatch."""
+    with queue.mutex:
+        for idx, item in enumerate(queue.queue):
+            if item[0] == request_id:
+                del queue.queue[idx]
+                if queue.unfinished_tasks > 0:
+                    queue.unfinished_tasks -= 1
+                queue.all_tasks_done.notify_all()
+                break
 
 # --- 2. IB Background Thread with Auto-Reconnect ---
 def ib_thread_loop(env, loop, queue, results_dict):
@@ -142,7 +154,7 @@ async def handle_intent(intent: str, request: Request):
         raise ValueError(f"Unknown intent received: {intent}")
     request_id = str(uuid.uuid4())
     try:
-        request.app.state.request_queue.put_nowait((request_id, INTENTS[intent], body))
+        request.app.state.request_queue.put((request_id, INTENTS[intent], body), timeout=5)
     except Full:
         return Response(content=json.dumps({"error": "Service is busy"}), status_code=503)
 
@@ -154,6 +166,7 @@ async def handle_intent(intent: str, request: Request):
         await asyncio.sleep(0.1)
     else:
         error_str = "Request timed out"
+        _drop_pending_request(request.app.state.request_queue, request_id)
     
     if error_str:
         result = {'error': error_str}
