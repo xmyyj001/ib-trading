@@ -2,7 +2,7 @@ import asyncio
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
-from ib_insync import MarketOrder
+from ib_insync import MarketOrder, Contract
 from lib.ib_serialization import dict_to_contract
 
 from intents.intent import Intent
@@ -24,6 +24,26 @@ def _contract_key(contract: Dict[str, Any]) -> str:
     if con_id is not None:
         return str(con_id)
     return f"{contract.get('symbol','')}:{contract.get('secType','')}:{contract.get('exchange','')}:{contract.get('currency','')}"
+
+
+def _normalize_contract_for_order(contract: Contract, plan: Dict[str, Any]) -> None:
+    if getattr(contract, 'secType', '').upper() != 'STK':
+        return
+
+    plan_contract = plan.get('contract') or {}
+    stored_exchange = plan_contract.get('exchange') or plan.get('exchange')
+    stored_primary = plan_contract.get('primaryExchange') or plan.get('primaryExchange')
+
+    if not getattr(contract, 'primaryExchange', None):
+        if stored_primary and stored_primary.upper() != 'SMART':
+            contract.primaryExchange = stored_primary
+        elif stored_exchange:
+            upper_exchange = stored_exchange.upper()
+            if upper_exchange != 'SMART':
+                contract.primaryExchange = stored_exchange
+
+    if getattr(contract, 'exchange', '').upper() != 'SMART':
+        contract.exchange = 'SMART'
 
 
 class Allocation(Intent):
@@ -133,11 +153,19 @@ class Allocation(Intent):
         orders_placed: List[Dict[str, Any]] = []
         if not self._dry_run:
             for plan in order_plan:
-                contract = dict_to_contract(plan['contract'])
+                contract_payload = plan.get('contract')
+                contract = dict_to_contract(contract_payload or {})
+                if not getattr(contract, 'conId', None) and not getattr(contract, 'symbol', None):
+                    self._env.logging.error(
+                        "Skipping order for %s because contract metadata is missing",
+                        plan.get('symbol') or plan
+                    )
+                    continue
                 if contract.conId is None:
                     qualified = await self._env.ibgw.qualifyContractsAsync(contract)
                     if qualified:
                         contract = qualified[0]
+                _normalize_contract_for_order(contract, plan)
                 order = MarketOrder(plan['action'], plan['quantity'])
                 trade = self._env.ibgw.placeOrder(contract, order)
                 if trade:

@@ -13,6 +13,25 @@
 下一步建议按上述待办优先级推进，完成调度切换→策略迁移→凭证治理→监控告警的闭环。***
 
 
+
+
+日志里 commander 报错的根因就在这一行：
+
+  Allocation._core_async → util.dictToContract(plan['contract'])
+  AttributeError: module 'ib_insync.util' has no attribute 'dictToContract'
+
+
+  建议的修复思路
+
+  1. 在 lib/ib_serialization.py 内新增一个 dict_to_contract 辅助方法（与现有 contract_to_dict 对偶），根据 Firestore 存下的字段构造
+     ib_insync.contract.Contract 或具体子类，并处理 __slots__。
+  2. intents/allocation.py 中把
+     如果返回的合约缺少 conId，可沿用原先的 qualifyContractsAsync 流程补齐。
+  3. 重新部署后复测 orchestrator / scheduler；verify_trading.py 中的 Commander 段落也要检查是否能读取 orders。
+  4. 为防回归，考虑补一条单元测试或 integration stub，构造一个 plan 样例验证 dict_to_contract 能成功还原 Stock 合约。
+
+  待修完再跑一次调度，Commander 部分就不会因为缺少 API 而提前失败。
+
 • - Added a native dict_to_contract helper so we can rebuild IB contracts without the removed ib_insync.util.dictToContract; see cloud-run/
     application/app/lib/ib_serialization.py:9-85.
   - Updated Commander to use the new helper when materialising contracts before order placement, removing the dependency on the deprecated

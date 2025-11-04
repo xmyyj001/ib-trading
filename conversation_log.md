@@ -57,3 +57,8 @@
     - FastAPI now exposes `GET /` status plus `POST /` proxying to the orchestrator intent to eliminate Cloud Run 404s when automation calls the base URL.  
     - Replaced lingering `ib_insync.util.contractToDict` usage with a local serializer that supports `__slots__`, refreshed strategy Firestore writes to use collection/document chains, and hardened GCP logging stubs so unit tests pass without real handlers.  
     - Adjusted `handle_intent` to translate IB reconnection failures into HTTP 503, re-ran unit tests, and validated Cloud Run after rebuilds using `curl`, `gcloud logging read`, and `verify_trading.py`; service now returns 200 with both strategies succeeding once the IB Gateway restarts cleanly.
+
+13. **Cloud Scheduler & Commander Compatibility (2025-11-03 16:05 UTC)**  
+    - Analysed lingering commander failures (`ib_insync.util.dictToContract` removal) from latest orchestrator run.  
+    - Added reciprocal `dict_to_contract` helper in `lib/ib_serialization.py` and updated `intents/allocation.py` to rely on it, eliminating the deprecated util call.  
+    - Created `orchestrator-daily-run` Cloud Scheduler job in `us-central1` targeting root `/` with dry-run payload; provided command set for pausing legacy jobs and documented verification steps.

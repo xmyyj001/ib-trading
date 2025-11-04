@@ -126,6 +126,27 @@ class FakeIBGW:
         return None
 
 
+class RecordingIBGW(FakeIBGW):
+    def __init__(self):
+        self.calls = []
+        self._next_order_id = 1
+
+    async def qualifyContractsAsync(self, contract):
+        return await super().qualifyContractsAsync(contract)
+
+    def placeOrder(self, contract, order):
+        order.orderId = self._next_order_id
+        self._next_order_id += 1
+        trade = SimpleNamespace(
+            order=order,
+            contract=contract,
+            orderStatus=SimpleNamespace(status='Submitted', remaining=0),
+            fills=[]
+        )
+        self.calls.append(trade)
+        return trade
+
+
 class AllocationIntentTests(unittest.TestCase):
     def setUp(self):
         self.execution_sink = []
@@ -190,6 +211,93 @@ class AllocationIntentTests(unittest.TestCase):
         # Execution log should be recorded
         self.assertEqual(len(self.execution_sink), 1)
         self.assertEqual(self.execution_sink[0]['orders'][0]['simulated'], True)
+
+    def test_allocation_places_smart_routed_sell_order(self):
+        recording_ibgw = RecordingIBGW()
+        execution_sink = []
+        now = datetime.now(timezone.utc).isoformat()
+        portfolio_doc = {
+            'updated_at': now,
+            'holdings': [
+                {
+                    'contract': {
+                        'conId': 2001,
+                        'symbol': 'QQQ',
+                        'secType': 'STK',
+                        'exchange': 'NASDAQ',
+                        'currency': 'USD'
+                    },
+                    'quantity': 10
+                }
+            ],
+            'open_orders': []
+        }
+        env = SimpleNamespace(
+            db=FakeDB(portfolio_doc, [], execution_sink),
+            ibgw=recording_ibgw,
+            logging=SimpleNamespace(
+                info=lambda *args, **kwargs: None,
+                warning=lambda *args, **kwargs: None,
+                error=lambda *args, **kwargs: None
+            ),
+            trading_mode='paper',
+            env={'K_REVISION': 'localhost'},
+            config={}
+        )
+
+        result = asyncio.run(Allocation(env, dryRun=False)._core_async())
+
+        self.assertEqual(len(recording_ibgw.calls), 1)
+        trade = recording_ibgw.calls[0]
+        self.assertEqual(trade.order.action, 'SELL')
+        self.assertEqual(trade.order.totalQuantity, 10)
+        self.assertEqual(trade.contract.exchange, 'SMART')
+        self.assertEqual(trade.contract.primaryExchange, 'NASDAQ')
+        self.assertEqual(result['orders'][0]['status'], 'Submitted')
+
+    def test_allocation_skips_order_when_contract_missing(self):
+        recording_ibgw = RecordingIBGW()
+        execution_sink = []
+        now = datetime.now(timezone.utc).isoformat()
+        portfolio_doc = {
+            'updated_at': now,
+            'holdings': [],
+            'open_orders': []
+        }
+        strategy_doc = FakeStrategyDoc(
+            'orphan',
+            {'enabled': True},
+            {
+                'status': 'success',
+                'updated_at': now,
+                'target_positions': [
+                    {
+                        'symbol': 'QQQ',
+                        'secType': 'STK',
+                        'exchange': 'NASDAQ',
+                        'currency': 'USD',
+                        'quantity': 5
+                    }
+                ]
+            }
+        )
+        env = SimpleNamespace(
+            db=FakeDB(portfolio_doc, [strategy_doc], execution_sink),
+            ibgw=recording_ibgw,
+            logging=SimpleNamespace(
+                info=lambda *args, **kwargs: None,
+                warning=lambda *args, **kwargs: None,
+                error=lambda *args, **kwargs: None
+            ),
+            trading_mode='paper',
+            env={'K_REVISION': 'localhost'},
+            config={}
+        )
+
+        result = asyncio.run(Allocation(env, dryRun=False)._core_async())
+
+        self.assertEqual(len(recording_ibgw.calls), 0)
+        self.assertEqual(result['orders'], [])
 
 
 if __name__ == '__main__':
