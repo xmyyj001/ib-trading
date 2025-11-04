@@ -22,6 +22,45 @@ def _prune_empty(value: Any) -> Any:
     return value
 
 
+def _object_to_mapping(obj: Any) -> Dict[str, Any]:
+    """
+    Convert an ``ib_insync`` object (contract/order/etc.) into a mutable mapping.
+    """
+    if is_dataclass(obj):
+        # Extract dataclass fields explicitly to avoid util.dataclassAsDict.
+        return {field.name: getattr(obj, field.name) for field in fields(obj)}
+    if isinstance(obj, dict):
+        return obj
+    if hasattr(obj, "__dict__"):
+        return {
+            key: getattr(obj, key)
+            for key in obj.__dict__
+            if not key.startswith("_")
+        }
+    if hasattr(obj, "__slots__"):
+        mapping: Dict[str, Any] = {}
+        for slot in obj.__slots__:
+            if slot.startswith("_"):
+                continue
+            try:
+                mapping[slot] = getattr(obj, slot)
+            except AttributeError:
+                continue
+        if mapping:
+            return mapping
+    return {"value": obj}
+
+
+def _normalize_mapping(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Apply pruning rules to an object's mapping representation."""
+    normalized: Dict[str, Any] = {}
+    for key, raw in data.items():
+        value = _prune_empty(raw)
+        if value not in (None, {}, [], ""):
+            normalized[key] = value
+    return normalized
+
+
 def contract_to_dict(contract: Any) -> Dict[str, Any]:
     """
     Serialize an ``ib_insync`` contract (or nested dataclasses) into a dict.
@@ -32,39 +71,8 @@ def contract_to_dict(contract: Any) -> Dict[str, Any]:
     if not contract:
         return {}
 
-    def _to_mapping(obj: Any) -> Dict[str, Any]:
-        if is_dataclass(obj):
-            # Extract dataclass fields explicitly to avoid util.dataclassAsDict.
-            return {field.name: getattr(obj, field.name) for field in fields(obj)}
-        if isinstance(obj, dict):
-            return obj
-        if hasattr(obj, "__dict__"):
-            return {
-                key: getattr(obj, key)
-                for key in obj.__dict__
-                if not key.startswith("_")
-            }
-        if hasattr(obj, "__slots__"):
-            mapping = {}
-            for slot in obj.__slots__:
-                if slot.startswith("_"):
-                    continue
-                try:
-                    mapping[slot] = getattr(obj, slot)
-                except AttributeError:
-                    continue
-            if mapping:
-                return mapping
-        return {"value": obj}
-
-    data = _to_mapping(contract)
-
-    normalized: Dict[str, Any] = {}
-    for key, raw in data.items():
-        value = _prune_empty(raw)
-        if value not in (None, {}, [], ""):
-            normalized[key] = value
-    return normalized
+    data = _object_to_mapping(contract)
+    return _normalize_mapping(data)
 
 
 def dict_to_contract(data: Dict[str, Any]) -> Contract:
@@ -83,3 +91,17 @@ def dict_to_contract(data: Dict[str, Any]) -> Contract:
             # Ignore attributes that cannot be set on the base contract
             continue
     return contract
+
+
+def order_to_dict(order: Any) -> Dict[str, Any]:
+    """
+    Serialize an ``ib_insync.Order`` (or compatible object) into a dict.
+
+    ``ib_insync.util.orderToDict`` was removed in recent releases, so we follow
+    the same pruning rules used for contracts.
+    """
+    if not order:
+        return {}
+
+    data = _object_to_mapping(order)
+    return _normalize_mapping(data)

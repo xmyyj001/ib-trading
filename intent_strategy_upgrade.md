@@ -293,3 +293,22 @@ graph TD
      python verify_trading.py --show-intents --project-id gold-gearbox-424413-k1 --strategies testsignalgenerator spy_macd_vixy
 
      对照输出中 “策略” / “Commander” 段落是否与日志一致。
+
+
+附：“IB 就绪”探针；
+并没有两万的方法。
+FastAPI 的 GET / 只说明应用跑着，不能判断 IB 背景线程是否已经连上网关。比较现实的办法是打一个最轻量的
+  IB 相关 intent，看它能否在超时时间内返回成功。
+
+  你可以用 reconcile 这个 intent（它只拉一次持仓，不会触发交易），命令如下：
+
+  curl -X POST "${ORCHESTRATOR_URL}/reconcile" \
+    -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
+    -H "Content-Type: application/json" \
+    -d '{"dryRun": true}'
+
+  - 如果 IB 背景线程已经连上，这个请求会在几秒内返回包含 holdings/open_orders 的 JSON。
+  - 如果还在重连（或网关未就绪），你会看到 {"error": "...Connection..."}、{"error": "Service is busy"} 或 {"error": "Request timed out"}，那
+    就再等一会或观察日志里是否出现 IB Thread (Outer Loop): Successfully connected. 之后再重试。
+
+  通过这个 curl 成功响应，就说明 IB 已经进入可执行状态，随后再跑 orchestrator 就不会因为冷启动而超时了。

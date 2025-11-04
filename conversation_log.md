@@ -62,3 +62,8 @@
     - Analysed lingering commander failures (`ib_insync.util.dictToContract` removal) from latest orchestrator run.  
     - Added reciprocal `dict_to_contract` helper in `lib/ib_serialization.py` and updated `intents/allocation.py` to rely on it, eliminating the deprecated util call.  
     - Created `orchestrator-daily-run` Cloud Scheduler job in `us-central1` targeting root `/` with dry-run payload; provided command set for pausing legacy jobs and documented verification steps.
+
+14. **Orchestrator Concurrency Backoff (2025-11-04 15:35 UTC)**  
+    - User kept hitting "Service is busy" on `/` despite retries.  
+    - Assistant expanded the FastAPI request queue to four slots, swapped `put_nowait` for a blocking `put(..., timeout=5)`, and added a cleanup path that prunes timed-out request IDs.  
+    - Highlighted the need to redeploy the updated revision so the queue change clears existing backlog before retesting.

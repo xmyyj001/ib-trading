@@ -41,3 +41,27 @@
 
   Next up, rebuild the application image and redeploy Cloud Run, then rerun the orchestrator (or the new Scheduler job) to confirm Commander
   now executes without errors.
+
+
+
+
+  Fix Summary
+
+  - Added reusable serializers that mirror the old ib_insync helpers so we no longer depend on removed APIs; _object_to_mapping, _normalize_mapping, and the
+    new order_to_dict now live alongside the existing contract utilities (cloud-run/application/app/lib/ib_serialization.py:25, cloud-run/application/app/lib/
+    ib_serialization.py:64, cloud-run/application/app/lib/ib_serialization.py:96).
+  - Updated the reconcile intent to serialize orders via our local helper, eliminating the failing util.orderToDict call (cloud-run/application/app/intents/
+    reconcile.py:4, cloud-run/application/app/intents/reconcile.py:47).
+  - Added unit coverage to confirm order serialization works and that contract round-trips remain intact (cloud-run/application/app/_tests/
+    test_ib_serialization.py:1).
+
+  Tests
+
+  - python -m unittest discover -s _tests -t .
+
+  Next Steps
+
+  1. Redeploy the Cloud Run service so the orchestrator picks up the new serializer.
+  2. Re-run the reconcile workflow (e.g., the same curl invocation) to confirm the error is resolved.
+
+ 

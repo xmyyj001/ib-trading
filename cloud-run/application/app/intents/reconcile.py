@@ -1,9 +1,7 @@
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
-from ib_insync import util
-
-from lib.ib_serialization import contract_to_dict
+from lib.ib_serialization import contract_to_dict, order_to_dict
 from intents.intent import Intent
 
 
@@ -46,7 +44,7 @@ class Reconcile(Intent):
                 "remainingQuantity": order_status.remaining,
                 "status": order_status.status,
                 "limitPrice": getattr(order, "lmtPrice", None),
-                "order": util.orderToDict(order),
+                "order": order_to_dict(order),
                 "contract": contract_to_dict(trade.contract)
             })
 
