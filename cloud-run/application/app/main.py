@@ -48,11 +48,25 @@ def ib_thread_loop(env, loop, queue, results_dict):
 
     async def resilient_main_logic():
         """Wraps the main logic in a perpetual auto-reconnect loop."""
+        min_backoff = 15
+        max_backoff = 300
+        backoff_seconds = min_backoff
         while True:
+            connection_established = False
             try:
                 logging.info("IB Thread (Outer Loop): Attempting to connect...")
                 await env.ibgw.connectAsync(host='127.0.0.1', port=4002, clientId=1, timeout=15)
                 logging.info("IB Thread (Outer Loop): Successfully connected.")
+
+                try:
+                    await env.ibgw.reqCurrentTimeAsync()
+                    logging.info("IB Thread: Connectivity probe succeeded.")
+                except Exception as probe_exc:
+                    logging.warning("IB Thread: Health probe failed after connect: %s", probe_exc, exc_info=True)
+                    raise
+
+                backoff_seconds = min_backoff
+                connection_established = True
 
                 # --- Inner loop for processing requests ---
                 while True:
@@ -74,20 +88,35 @@ def ib_thread_loop(env, loop, queue, results_dict):
                     except Exception as e:
                         logging.error(f"IB Thread: Error running intent: {e}", exc_info=True)
                         error_str = f'{e.__class__.__name__}: {e}'
-                    
+
                     results_dict[request_id] = (result_data, error_str)
                     queue.task_done()
 
             except asyncio.TimeoutError:
-                 logging.warning("IB Thread: Connection attempt timed out. Retrying in 15s...")
-                 await asyncio.sleep(15)
+                logging.warning(
+                    "IB Thread: Connection attempt timed out. Retrying in %ds...",
+                    backoff_seconds
+                )
             except Exception as e:
-                logging.critical(f"IB Thread (Outer Loop): Critical error: {e}", exc_info=True)
+                logging.critical(
+                    "IB Thread (Outer Loop): Critical error: %s. Retrying in %ds...",
+                    e,
+                    backoff_seconds,
+                    exc_info=True
+                )
             finally:
                 if env.ibgw.isConnected():
                     env.ibgw.disconnect()
-                logging.info("IB Thread (Outer Loop): Disconnected. Attempting reconnection in 15 seconds...")
-                await asyncio.sleep(15)
+                logging.info(
+                    "IB Thread (Outer Loop): Disconnected. Attempting reconnection in %d seconds...",
+                    backoff_seconds
+                )
+
+            await asyncio.sleep(backoff_seconds)
+            if not connection_established:
+                backoff_seconds = min(backoff_seconds * 2, max_backoff)
+            else:
+                backoff_seconds = min_backoff
 
     loop.run_until_complete(resilient_main_logic())
 

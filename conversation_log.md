@@ -67,3 +67,8 @@
     - User kept hitting "Service is busy" on `/` despite retries.  
     - Assistant expanded the FastAPI request queue to four slots, swapped `put_nowait` for a blocking `put(..., timeout=5)`, and added a cleanup path that prunes timed-out request IDs.  
     - Highlighted the need to redeploy the updated revision so the queue change clears existing backlog before retesting.
+
+15. **Commander & Log Diagnostics (2025-11-08 04:20 UTC)**  
+    - User asked for end-to-end log analysis (`logging.txt`, `logging1.txt`) to diagnose commander behavior and IB connectivity.  
+    - Assistant catalogued repeated IB gateway failures, identified reconcile crashes due to `ib_insync.util.orderToDict`, and confirmed commander was placing test-strategy-driven liquidations.  
+    - Documented remediation plan (fix serialization, stabilize gateway, clarify strategy overrides, add commander logging) in `进展对照intent_strategy_upgrade.md`, added “修复工程：对账 & Commander 可观测性”，以及更新后的项目工程顺序。
