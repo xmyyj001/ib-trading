@@ -44,6 +44,12 @@ class Orchestrator(Intent):
         }
 
         strategy_ids = self._strategy_ids or list(STRATEGY_INTENT_REGISTRY.keys())
+        self._env.logging.info(
+            "Orchestrator: executing strategies %s (dry_run=%s, run_reconcile=%s)",
+            strategy_ids,
+            self._dry_run,
+            self._run_reconcile
+        )
 
         for strategy_id in strategy_ids:
             intent_cls = STRATEGY_INTENT_REGISTRY.get(strategy_id)

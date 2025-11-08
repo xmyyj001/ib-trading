@@ -72,3 +72,8 @@
     - User asked for end-to-end log analysis (`logging.txt`, `logging1.txt`) to diagnose commander behavior and IB connectivity.  
     - Assistant catalogued repeated IB gateway failures, identified reconcile crashes due to `ib_insync.util.orderToDict`, and confirmed commander was placing test-strategy-driven liquidations.  
     - Documented remediation plan (fix serialization, stabilize gateway, clarify strategy overrides, add commander logging) in `进展对照intent_strategy_upgrade.md`, added “修复工程：对账 & Commander 可观测性”，以及更新后的项目工程顺序。
+
+16. **Strategy Normalization & Commander Logging (2025-11-08 10:00 UTC)**  
+    - Implemented opt-in env flag `ENABLE_TEST_STRATEGY_OVERRIDE` so production no longer auto-registers `testsignalgenerator`; strategy discovery now logs via `logging` instead of `print`.  
+    - Orchestrator intent logs the list of strategies/dry-run config per invocation; Commander intent writes INFO summaries (“Planned X orders; …”) plus missing/stale strategy context.  
+    - All unit tests pass; pending Cloud Run redeploy to verify the new logging and strategy selection behavior in production.

@@ -1,9 +1,18 @@
-import pkgutil
 import inspect
+import logging
+import os
+import pkgutil
 from pathlib import Path
 
 # A dictionary to hold all discovered strategy classes
 STRATEGIES = {}
+_logger = logging.getLogger(__name__)
+
+def _log(msg: str) -> None:
+    if _logger.handlers:
+        _logger.info(msg)
+    else:
+        print(msg)
 
 def _discover_strategies():
     """
@@ -22,19 +31,24 @@ def _discover_strategies():
                 if issubclass(item, Strategy) and item is not Strategy:
                     strategy_key = item.__name__.lower()
                     STRATEGIES[strategy_key] = item
-                    print(f"Discovered and registered strategy: '{strategy_key}'")
+                    _log(f"Discovered and registered strategy: '{strategy_key}'")
         except Exception as e:
-            print(f"Could not import or inspect module {name}: {e}")
+            _log(f"Could not import or inspect module {name}: {e}")
 
 # 1. Run the automatic discovery process first
 _discover_strategies()
 
-# 2. Manually register the specific test strategy if it exists.
-# This ensures it's available under the correct key for testing.
-try:
-    from .test_signal_generator import TestSignalGenerator
-    STRATEGIES['testsignalgenerator'] = TestSignalGenerator
-    print(f"Manually overrode/registered test strategy: 'testsignalgenerator'")
-except ImportError:
-    # This is not an error; the test file may not always be present.
-    pass
+# 2. Optional manual registration for the legacy test strategy.
+ENABLE_TEST_OVERRIDE = os.environ.get("ENABLE_TEST_STRATEGY_OVERRIDE", "").lower() in ("1", "true", "yes")
+if ENABLE_TEST_OVERRIDE:
+    try:
+        from .test_signal_generator import TestSignalGenerator
+        STRATEGIES['testsignalgenerator'] = TestSignalGenerator
+        _log("Manually overrode/registered test strategy: 'testsignalgenerator'")
+    except ImportError:
+        pass
+else:
+    _log("Test strategy override disabled; set ENABLE_TEST_STRATEGY_OVERRIDE=1 to re-enable.")
+
+if STRATEGIES:
+    _log(f"Strategy registry initialized with: {', '.join(sorted(STRATEGIES.keys()))}")

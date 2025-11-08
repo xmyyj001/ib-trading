@@ -186,11 +186,13 @@ class Allocation(Intent):
                     'quantity': plan['quantity']
                 })
 
+        summary_text = f"Planned {len(order_plan)} orders; {'placed' if not self._dry_run else 'simulated'} {len(orders_placed)}"
+
         execution_payload = {
             'executed_at': now.isoformat(),
             'trigger': 'scheduled',
             'status': 'completed',
-            'summary': f"Planned {len(order_plan)} orders; {'placed' if not self._dry_run else 'simulated'} {len(orders_placed)}",
+            'summary': summary_text,
             'context': {
                 'portfolio_snapshot_ref': f"{portfolio_doc_ref.path}#latest_portfolio@{portfolio.get('updated_at')}",
                 'strategy_snapshots': strategy_snapshots,
@@ -224,6 +226,12 @@ class Allocation(Intent):
 
         execution_doc = self._env.db.collection('executions').document()
         execution_doc.set(execution_payload)
+        self._env.logging.info(
+            "Commander: %s | missing=%s | stale=%s",
+            summary_text,
+            missing_strategies,
+            stale_strategies
+        )
 
         self._activity_log.update(
             status='success',

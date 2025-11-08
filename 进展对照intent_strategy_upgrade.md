@@ -8,7 +8,7 @@
   1. **调度编排切换**：准备创建 `orchestrator-daily-run`（POST `https://ib-paper-.../`，JSON 载荷 `{"strategies":["testsignalgenerator","spy_macd_vixy"],"dryRun":true,"runReconcile":true}`，OIDC 服务账号 `ib-trading@…`），并逐步停用旧作业（`daily-reconciliation-job`、`eod-allocation-job`、`high-frequency-test-runner`）；待 Cloud Scheduler/Workflows 调整后即可勾掉此项。
   2. **多策略迁移**：除 `testsignalgenerator`、`spy_macd_vixy` 外，其余策略仍使用旧路径/命名，需要按计划迁移 Firestore 配置及风险预算（文档第 3.1 节）。
   3. **Secret & 凭证治理**：确认 Secret Manager 中 `ib-*-username/password` 的版本轮换策略，补充自动化检测（若凭证失效会导致 503）。
-  4. **策略预算隔离**：在 `strategies/{id}` 配置中增加 `allowed_symbols`/`max_notional` 等约束，策略生成目标时遵守；Commander 在 `Allocation._collect_strategy_targets` → `order_plan` 之间插入权重裁剪逻辑，确保多策略共存仍按各自资金池执行，互不干扰。
+  4. **策略预算孤立**：在 `strategies/{id}` 配置中增加 `allowed_symbols`/`max_notional` 等约束，策略生成目标时遵守；Commander 在 `Allocation._collect_strategy_targets` → `order_plan` 之间插入权重裁剪逻辑，确保多策略共存仍按各自资金池执行，互不干扰。
   5. **监控告警**：落地针对 orchestrator 503/超时的 Cloud Logging Metric 或 Error Reporting 告警，保证 Gateway 断线可及时通知运维。
 
 下一步建议按上述待办优先级推进，完成调度切换→策略迁移→凭证治理→监控告警的闭环。***
@@ -39,7 +39,7 @@
 
 4. **Commander 阶段日志可见性**  
    - 做法：在 `Allocation._core_async` 中 `order_plan` 生成后、下单前新增 `self._env.logging.info("Commander: planned %d orders; %s %d", ...)`，dry-run 时输出 “simulated”；否则输出实际下单数。同步把该 summary 写入执行文档。  
-   - 验证：触发 orchestrator，Cloud Logging 应出现上述 INFO，且 `executions/*` 文档 `summary` 一致。  
+   - 当前状态：代码已提交；待部署后通过 orchestrator 调用验证日志输出。  
    - 估时：<20 分钟。
 
 5. **统一验证步骤（适用于上述每项）**  
@@ -49,8 +49,21 @@
 
 ## 项目整体工程顺序（建议）
 1. **稳定基础设施**：完成 `orderToDict` 修复 + Gateway 退避改造（本修复工程第 1-2 项），确保对账/连接可靠。
-2. **策略运行规范化**：落地策略选择开关 & Commander 日志（修复工程第 3-4 项），同时推进“策略预算隔离”待办（为每个策略配置 allowed symbols、资金上限，并在 Commander 做权重裁剪）。
+2. **策略运行规范化**：落地策略选择开关 & Commander 日志（修复工程第 3-4 项，已提交代码，待部署验证），同时推进“策略预算隔离”待办（为每个策略配置 allowed symbols、资金上限，并在 Commander 做权重裁剪）。
 3. **编排切换**：创建新的 orchestrator Scheduler/Workflows，逐步替换旧作业（待办 1）。
 4. **多策略迁移**：按架构要求迁移剩余策略及 Firestore 配置（待办 2）。
 5. **Secret / 凭证治理**（待办 3）。
 6. **监控 & 告警**（待办 5），覆盖 orchestrator 超时、Gateway 断线、策略意图缺失等关键指标。
+
+
+
+• - 这一步改的是 IB 背景线程的连接退避/探针逻辑，属于系统级基础设施。建议尽早部署到 Cloud Run：只有跑在真实 Gateway 环境下，才能观察连接日
+    志是否按预期退避、以及 4002 端口偶发故障时的恢复速度。部署后可顺便跑一次 orchestrator dry-run（POST / with {"dryRun": true}）验证整条
+    链路。
+  - 工程顺序上，下一阶段“策略规范化”（取消强制 test 策略、Commander 打日志、策略预算配置）和“调度切换”可以并行开发，但最好按“代码→本地单测→
+    一次性部署”分批提交，以免多项修改同时上线时难以定位问题。推荐节奏：
+      1. 当前退避补丁：部署 + Cloud Run 验证 → 形成基线。
+      2. 策略规范化 & Commander 日志：这两个改动都在应用层（orchestrator/allocation），可以合在一个发布批次，部署后一次 orchestrator 调用即
+         可同时验证“策略不再被 override + Commander 日志出现”。
+      3. 调度切换：在应用层稳定后，再调整 Cloud Scheduler/Workflows；这涉及 GCP 配置，最好在前两批上线、稳定运行后再做，避免同时调度和代码变
+         化导致排障困难。
