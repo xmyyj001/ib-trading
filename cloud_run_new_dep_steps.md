@@ -166,32 +166,57 @@ Cloud Build 的 `Deploy-to-Cloud-Run` 步骤会自动发布新修订。完成后
 ```
 python verify_trading.py  --show-intents --project-id gold-gearbox-424413-k1 --strategies testsignalgenerator spy_macd_vixy 
 ```
-4. **Scheduler 验证**（如已配置）  
-   ```bash
-   gcloud scheduler jobs run daily-strategy-orchestrator --location=${GCP_REGION}
-   gcloud scheduler jobs describe daily-strategy-orchestrator --location=${GCP_REGION}
-   ```
-   ```bash #setting
-   ORCHESTRATOR_URL="https://ib-paper-599151217267.us-central1.run.app"
-   SERVICE_ACCOUNT="ib-trading@gold-gearbox-424413-k1.iam.gserviceaccount.com"
+4. **Scheduler 编排切换**  
+   1. **暂停旧作业**（防止重复触发旧意图）  
+      ```bash
+      for job in daily-reconciliation-job eod-allocation-job high-frequency-test-runner; do
+        gcloud scheduler jobs pause "$job" \
+          --project=gold-gearbox-424413-k1 \
+          --location=us-central1
+      done
+      ```
+   2. **创建统一 orchestrator 作业**  
+      ```bash
+      ORCHESTRATOR_URL="https://ib-paper-599151217267.us-central1.run.app"
+      SERVICE_ACCOUNT="ib-trading@gold-gearbox-424413-k1.iam.gserviceaccount.com"
 
-   # 执行修正后的命令
-   gcloud scheduler jobs create http orchestrator-daily-run \
-   --project=gold-gearbox-424413-k1 \
-   --location=us-central1 \
-   --schedule="15 16 * * 1-5" \
-   --time-zone="America/New_York" \
-   --uri="${ORCHESTRATOR_URL}/" \
-   --http-method=POST \
-   --headers="Content-Type=application/json" \
-   --message-body='{"strategies":["testsignalgenerator","spy_macd_vixy"],"dryRun":false,"runReconcile":true}' \
-   --oidc-service-account-email="${SERVICE_ACCOUNT}" \
-   --oidc-token-audience="${ORCHESTRATOR_URL}"
-      # 创建后可用 做一次手动触发验证。
-       gcloud scheduler jobs run orchestrator-daily-run \
-       --project=gold-gearbox-424413-k1 \
-      --location=us-central1 
-   ```
+      gcloud scheduler jobs create http orchestrator-daily-run \
+        --project=gold-gearbox-424413-k1 \
+        --location=us-central1 \
+        --schedule="15 16 * * 1-5" \
+        --time-zone="America/New_York" \
+        --uri="${ORCHESTRATOR_URL}/" \
+        --http-method=POST \
+        --headers="Content-Type=application/json" \
+        --message-body='{"strategies":["testsignalgenerator","spy_macd_vixy"],"dryRun":true,"runReconcile":true}' \
+        --oidc-service-account-email="${SERVICE_ACCOUNT}" \
+        --oidc-token-audience="${ORCHESTRATOR_URL}"
+      ```
+      *初次上线建议 `dryRun:true`；验证无误后再 `jobs update http ... --message-body … "dryRun":false …`。*
+
+   3. **手动触发与日志确认**  
+      ```bash
+      gcloud scheduler jobs run orchestrator-daily-run \
+        --project=gold-gearbox-424413-k1 \
+        --location=us-central1
+
+      gcloud logging read \
+        'resource.type="cloud_run_revision" AND resource.labels.service_name="ib-paper"' \
+        --project=gold-gearbox-424413-k1 \
+        --freshness=5m \
+        --format="table(timestamp, severity, textPayload)"
+      ```
+      确认 Cloud Run 日志显示“策略→对账→Commander”完整链路、Commander `missing=[]`。
+
+   4. **退役旧作业**（完成验证后删除或保持暂停）  
+      ```bash
+      for job in daily-reconciliation-job eod-allocation-job high-frequency-test-runner; do
+        gcloud scheduler jobs delete "$job" \
+          --quiet \
+          --project=gold-gearbox-424413-k1 \
+          --location=us-central1
+      done
+      ```
 ## 8. 回滚策略
 
 1. **快速回滚**：将 Cloud Run 服务流量切回上一修订。

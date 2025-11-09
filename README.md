@@ -208,6 +208,31 @@ curl -X POST -H "Authorization: Bearer ${TOKEN}" \
  "${SERVICE_URL}/trade-reconciliation"
 ```
 
+### 4.5 多策略下的使用和结果分析方法：
+• 交互情景
+
+  - 两策都看多：testsignalgenerator 和 spy_macd_vixy 同时输出正向目标，Commander 在 intents/allocation.py:127-188 聚合后对同一合约的贡献做加    总（contributors 字段）。如果两者都指向 SPY，Commander 会用 sum(目标) 对照 positions/{mode}/latest_portfolio/snapshot 的持仓/在途订单求    差，生成一张合并买单，避免重复下单。
+  - 一多一空：当 MACD 策略转空而测试策略仍看多，Commander 在 aggregated_targets 里把 SPY 的正负数量抵消，只下剩余差额的方向订单，或在完全抵
+    消时不下单。若 spy_macd_vixy 还想做 VIXY，对 SPY 结果为 0，但 VIXY 部分仍会生成独立目标；不同合约互不干扰。
+  - 策略缺失/陈旧：若某策略未写意图或 updated_at 超过 freshMinutes，在 _collect_strategy_targets 中被加入 missing_strategies 或
+    stale_strategies，Commander 会在执行日志和 Cloud Run 日志中标注，并完全忽略它的目标，防止过期指令影响其他策略。
+  - 单策略报错：比如 testsignalgenerator 无法拿到历史数据，它会写 status: "error"，Commander同样把它视作 stale，并继续处理其余策略。
+    strategies/{id}/intent/latest 里保留错误信息供诊断。
+  - Reconcile 发现真实仓位偏差：若手动交易或 IB 误差导致真实持仓与目标差距大，对账后的 positions/{mode}/latest_portfolio/snapshot 记录会显示
+    异常数量。Commander 计算 delta 时自动包含该偏差，下一次 orchestrator 就会下反向单把组合拉回策略合意位置，不会因为某策略临时调整而影响另
+    一策略的目标输入。
+
+  每日对账分析
+
+  - cloud-run/application/app/intents/reconcile.py 写入的数据包括 updated_at, net_liquidation, available_funds, holdings[], open_orders[]。    用 verify_trading.py 或后台控制台查看这个快照即可掌握真实仓位；holdings 里的 contract 序列化细节让 Commander 能准确识别合约，open_orders     反映在途指令。
+  - 每次 orchestrator 后 Commander 会生成一条 executions/{exec_id} 记录（intents/allocation.py:188-239），context.portfolio_snapshot_ref 指     向这次决策所依赖的对账文档，便于审计“某天的仓位/现金 → Commander 的 diff → 下单结果”。
+  - 分析顺序建议：
+      1. 查看 positions/{mode}/latest_portfolio/snapshot 的 updated_at 是否在预期窗口内；若落后，说明对账未跑或失败。
+      2. 对照 holdings 与各策略 intent/latest.target_positions，可以判断 Commander 是否需要动作（target - holdings - open_orders 的结果就是   Commander decision.diff 里的 delta）。
+      3. 若 Commander 日志出现 missing / stale，根据 strategy_intents_refs 里的时间戳回查对应策略意图文档中的 status 和 error_message，确定   是参数、数据源或环境问题。
+      4. 监控 net_liquidation / available_funds 对策略预算的影响；策略逻辑里通常用 config.exposure（在 env.config）决定部署资本，若资金大幅
+         波动、目标数量也会等比例调整。
+
 ---
 
 ## 5. 部署流程

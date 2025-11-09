@@ -77,3 +77,12 @@
     - Implemented opt-in env flag `ENABLE_TEST_STRATEGY_OVERRIDE` so production no longer auto-registers `testsignalgenerator`; strategy discovery now logs via `logging` instead of `print`.  
     - Orchestrator intent logs the list of strategies/dry-run config per invocation; Commander intent writes INFO summaries (“Planned X orders; …”) plus missing/stale strategy context.  
     - All unit tests pass; pending Cloud Run redeploy to verify the new logging and strategy selection behavior in production.
+
+17. **Firestore Snapshot Restructure & Cloud Run Dry-Run (2025-11-09 02:50 UTC)**  
+    - Reconcile intent now persists broker snapshots at `positions/{mode}/latest_portfolio/snapshot` while keeping the embedded field for backward compatibility; Allocation and `verify_trading.py` load the new document first, falling back only if absent.  
+    - Allocation intent’s strategy target collector was updated to honor orchestrator-supplied strategy lists even when corresponding Firestore docs are missing, eliminating spurious `missing` logs; execution payloads now reference the precise snapshot path.  
+    - Refreshed unit tests to reflect the new Firestore contract; full suite passes. Cloud Run dry-run (`POST /`) with `testsignalgenerator` and `spy_macd_vixy` produced `missing=[]`, commander simulated a single SPY buy, and logs confirm the end-to-end “策略→对账→Commander” flow is healthy.
+18. **Scheduler Cutover (2025-11-09 04:40 UTC)**  
+    - Created the new `orchestrator-daily-run` Scheduler job in `us-central1`, ran it manually to trigger Cloud Run, and confirmed logs show the expected warm-up sequence.  
+    - Deleted legacy jobs in `asia-east1` (`daily-reconciliation-job`, `eod-allocation-job`, `high-frequency-test-runner`) to avoid duplicate triggers; only the new dry-run job remains enabled.  
+    - Next adjustment is to update the Scheduler payload to `dryRun:false` once ready for live execution.

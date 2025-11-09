@@ -2,10 +2,11 @@
 
 - ✅ **策略改造**：`testsignalgenerator`、`spy_macd_vixy` 已改写为只输出 Firestore 目标仓位（参见 `cloud-run/application/app/strategies/*.py`），Commander 从 `positions/{mode}/latest_portfolio` 读取真实仓位并集中决策（`intents/allocation.py`）。
 - ✅ **Orchestrator 流程**：`/` POST 已代理到 orchestrator，顺序执行“策略 → 对账 → Commander”，并在 503 时提示 IB 重连状态（`main.py:117-165`、`intents/orchestrator.py`）。根路由 GET 提供健康检查，便于 Cloud Run/Scheduler 校验。
-- ✅ **持仓快照与序列化**：`reconcile` 统一写入 `positions/{trading_mode}/latest_portfolio`；自研 `lib/ib_serialization.contract_to_dict` 解决 ib_insync 兼容性并清理 Firestore 写入路径。
+- ✅ **持仓快照与序列化**：`reconcile` 现已同步写入 `positions/{trading_mode}/latest_portfolio/snapshot`（同时保留嵌入式 `latest_portfolio` 以兼容旧逻辑）；自研 `lib/ib_serialization.contract_to_dict` 解决 ib_insync 兼容性并清理 Firestore 写入路径。
 - ✅ **单测/脚本验证**：`python -m unittest discover -s _tests -t .` 通过；`verify_trading.py --show-intents` 在 paper 环境输出最新指令与敞口；Cloud Run 实例经 `curl` 验证返回 200。
+- ✅ **云端验证（2025-11-09）**：部署后通过 `curl -X POST ${ORCHESTRATOR_URL}` 触发全链路（策略→对账→Commander），两个策略 `status=success`，Commander 日志 `missing=[]/stale=[]`，执行文档写入 `orders=[{"simulated":true,"symbol":"SPY","action":"BUY","quantity":2689}]`，验证策略规范化+总指挥决策闭环已在 Cloud Run 生效。
 - ⚠️ **待完成**
-  1. **调度编排切换**：准备创建 `orchestrator-daily-run`（POST `https://ib-paper-.../`，JSON 载荷 `{"strategies":["testsignalgenerator","spy_macd_vixy"],"dryRun":true,"runReconcile":true}`，OIDC 服务账号 `ib-trading@…`），并逐步停用旧作业（`daily-reconciliation-job`、`eod-allocation-job`、`high-frequency-test-runner`）；待 Cloud Scheduler/Workflows 调整后即可勾掉此项。
+  1. **调度编排切换** —— ✅ 完成：`orchestrator-daily-run` 已在 us-central1 启用并通过干跑验证，asia-east1 的旧作业（`daily-reconciliation-job`、`eod-allocation-job`、`high-frequency-test-runner`）已删除；待运营确认后再将 Scheduler payload 从 `dryRun:true` 切换为实际下单。
   2. **多策略迁移**：除 `testsignalgenerator`、`spy_macd_vixy` 外，其余策略仍使用旧路径/命名，需要按计划迁移 Firestore 配置及风险预算（文档第 3.1 节）。
   3. **Secret & 凭证治理**：确认 Secret Manager 中 `ib-*-username/password` 的版本轮换策略，补充自动化检测（若凭证失效会导致 503）。
   4. **策略预算孤立**：在 `strategies/{id}` 配置中增加 `allowed_symbols`/`max_notional` 等约束，策略生成目标时遵守；Commander 在 `Allocation._collect_strategy_targets` → `order_plan` 之间插入权重裁剪逻辑，确保多策略共存仍按各自资金池执行，互不干扰。
@@ -48,13 +49,48 @@
    - 最终以一次 orchestrator 调用验证“策略 → Reconcile → Commander”完整链路，并确认 `Allocation` 新增的日志出现。***
 
 ## 项目整体工程顺序（建议）
-1. **稳定基础设施**：完成 `orderToDict` 修复 + Gateway 退避改造（本修复工程第 1-2 项），确保对账/连接可靠。
-2. **策略运行规范化**：落地策略选择开关 & Commander 日志（修复工程第 3-4 项，已提交代码，待部署验证），同时推进“策略预算隔离”待办（为每个策略配置 allowed symbols、资金上限，并在 Commander 做权重裁剪）。
-3. **编排切换**：创建新的 orchestrator Scheduler/Workflows，逐步替换旧作业（待办 1）。
-4. **多策略迁移**：按架构要求迁移剩余策略及 Firestore 配置（待办 2）。
-5. **Secret / 凭证治理**（待办 3）。
-6. **监控 & 告警**（待办 5），覆盖 orchestrator 超时、Gateway 断线、策略意图缺失等关键指标。
+1. **稳定基础设施** —— ✅ 完成：`order_to_dict` 替换、对账序列化补丁与 IB 背景线程退避逻辑均已上线并在 Cloud Run 上通过一轮 orchestrator dry-run 复核。
+2. **策略运行规范化** —— ✅ 完成核心：策略注册由 orchestrator 参数驱动、Commander 日志+执行文档已验证；新增 `positions/{mode}/latest_portfolio/snapshot` 支撑对账/Commander 解耦。后续“策略预算隔离”作为单独待办 4 跟进。
+3. **编排切换** —— ⏳ 计划中：待创建 `orchestrator-daily-run` Scheduler 并下线旧 CRON 作业。
+4. **多策略迁移** —— ⏳ 未启动：其余策略仍在旧路径，待 Firestore 配置迁移。
+5. **Secret / 凭证治理** —— ⏳ 未启动：需梳理 Secret Manager 轮换策略。
+6. **监控 & 告警** —— ⏳ 未启动：待为 orchestrator/IB 断线建立 Logging Metric 或 Error Reporting 告警。
 
+
+
+11-9
+Yes—functionally everything is ready. The new orchestrator-daily-run already fans through “策略 → 对账 → Commander” without missing/stale
+  flags, and the legacy schedulers have been removed, so the job is the sole entrypoint.
+
+  Before flipping to live orders, double-check:
+
+  - IB Gateway creds/Secret Manager entries are current (avoids 503 loops).
+  - The two active strategies’ intents are updating within the freshness window (no stale_strategies).
+  - Any per-strategy budget/allowed-symbol constraints you expect are encoded, since Commander will honor exactly what the intents publish.
+
+  Once those look good, switch the scheduler payload to dryRun:false:
+
+  gcloud scheduler jobs update http orchestrator-daily-run \
+    --project=gold-gearbox-424413-k1 \
+    --location=us-central1 \
+    --message-body='{"strategies":["testsignalgenerator","spy_macd_vixy"],"dryRun":false,"runReconcile":true}'
+
+  Then watch Cloud Run logs on the next trigger to confirm Commander logs “placed” instead of “simulated” orders.
+
+- 状态对照：策略改造、入口编排、Firestore 快照、单测与线上 dry-run 都已经按 intent_strategy_upgrade.md 落地，Commander/策略分工也在 Cloud
+    Run 上通过 curl 与 Scheduler 干跑验证。最新待办集中在五项：
+      1. 调度编排切换：手动触发的 orchestrator-daily-run 成功唤起服务，下一步是监控该任务的完整执行日志（确认“策略→对账→Commander”出现且
+         missing=[]），然后 gcloud scheduler jobs update http 把 payload 改成 dryRun:false，最后删除 asia-east1 的旧作业。
+      2. 多策略迁移：将剩余策略迁入“策略即意图”模型，对应的 Firestore 配置/预算项也要补齐。
+      3. Secret & 凭证治理：审查 ib-*-username/password 的 Secret Manager 版本与轮换告警，避免 503。
+      4. 策略预算孤立：在 Firestore strategies/{id} 文档维护 allowed_symbols、max_notional 等约束，并在 Commander 中读取这些配置裁剪
+         aggregated_targets。
+      5. 监控告警：为 orchestrator 503、超时和 IB 断线建立 Cloud Logging Metric 或 Error Reporting 告警。
+  - 下一步修改建议：
+      1. 完成 Scheduler 切换闭环（dry-run→logs→更新 payload→删除旧 job），验证一次真实下单流程。
+      2. 选定下一批策略（例如 dummy 或其他生产策略），参照 spy_macd_vixy 的模式重构并补齐 Firestore 配置。
+      3. 编写 Secret 轮换检测脚本或 Terraform 规则，并把告警连到 Pager/Email。
+      4. 在 Commander 中实现 budget clamp（读取策略配置、限制目标敞口），并为这些逻辑补一组单测。
 
 
 • - 这一步改的是 IB 背景线程的连接退避/探针逻辑，属于系统级基础设施。建议尽早部署到 Cloud Run：只有跑在真实 Gateway 环境下，才能观察连接日
