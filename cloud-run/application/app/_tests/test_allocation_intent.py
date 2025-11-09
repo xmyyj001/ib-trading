@@ -10,6 +10,7 @@ class FakeIntentDocument:
     def __init__(self, path, data):
         self._data = data
         self.reference = SimpleNamespace(path=path)
+        self.path = path
 
     def get(self):
         return self
@@ -32,12 +33,30 @@ class FakeIntentCollection:
         return FakeIntentDocument(path, self._intent_data)
 
 
+class FakeStrategyDocumentReference:
+    def __init__(self, doc):
+        self._doc = doc
+        self.path = f"strategies/{doc.id}"
+
+    def collection(self, name):
+        if name != 'intent':
+            raise ValueError(f"Unsupported collection: {name}")
+        return FakeIntentCollection(self._doc.id, self._doc._intent_data)
+
+    def get(self):
+        return self._doc
+
+
 class FakeStrategyDoc:
     def __init__(self, doc_id, data, intent_data):
         self.id = doc_id
         self._data = data
         self._intent_data = intent_data
-        self.reference = SimpleNamespace(collection=lambda _: FakeIntentCollection(doc_id, intent_data))
+        self.reference = FakeStrategyDocumentReference(self)
+
+    @property
+    def exists(self):
+        return self._data is not None
 
     def to_dict(self):
         return self._data
@@ -45,10 +64,15 @@ class FakeStrategyDoc:
 
 class FakeStrategyCollection:
     def __init__(self, docs):
-        self._docs = docs
+        self._docs = {doc.id: doc for doc in docs}
 
     def stream(self):
-        return iter(self._docs)
+        return iter(self._docs.values())
+
+    def document(self, name):
+        if name not in self._docs:
+            self._docs[name] = FakeStrategyDoc(name, None, None)
+        return self._docs[name].reference
 
 
 class FakeExecutionDocument:
@@ -84,6 +108,31 @@ class FakePortfolioDocument:
         return self._data
 
 
+class FakeLatestPortfolioCollection:
+    def __init__(self, parent_path, portfolio):
+        snapshot_path = f"{parent_path}/latest_portfolio/snapshot"
+        self._doc = FakePortfolioDocument(snapshot_path, portfolio)
+
+    def document(self, name):
+        if name != 'snapshot':
+            raise ValueError(f"Unsupported snapshot document: {name}")
+        return self._doc
+
+
+class FakePositionsDocument:
+    def __init__(self, trading_mode, portfolio):
+        self._portfolio = portfolio
+        self.path = f'positions/{trading_mode}'
+
+    def collection(self, name):
+        if name != 'latest_portfolio':
+            raise ValueError(f"Unsupported collection: {name}")
+        return FakeLatestPortfolioCollection(self.path, self._portfolio)
+
+    def get(self):
+        return FakePortfolioDocument(self.path, {'latest_portfolio': self._portfolio})
+
+
 class FakePositionsCollection:
     def __init__(self, trading_mode, portfolio):
         self._trading_mode = trading_mode
@@ -92,8 +141,7 @@ class FakePositionsCollection:
     def document(self, name):
         if name != self._trading_mode:
             raise ValueError(f"Unsupported positions document: {name}")
-        path = f'positions/{name}'
-        return FakePortfolioDocument(path, {'latest_portfolio': self._portfolio})
+        return FakePositionsDocument(name, self._portfolio)
 
 
 class FakeDB:

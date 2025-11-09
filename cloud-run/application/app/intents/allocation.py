@@ -67,15 +67,12 @@ class Allocation(Intent):
         now = datetime.now(timezone.utc)
         freshness_delta = timedelta(minutes=self._fresh_minutes)
 
-        portfolio_doc_ref = self._env.db.collection("positions").document(self._env.trading_mode)
-        portfolio_doc = portfolio_doc_ref.get()
-        doc_data = portfolio_doc.to_dict() if portfolio_doc.exists else None
-        if not doc_data:
-            raise RuntimeError("Portfolio snapshot missing; run reconcile first.")
-
-        portfolio = doc_data.get("latest_portfolio", {})
+        portfolio, portfolio_doc_ref, legacy_shape = self._load_portfolio_snapshot()
         if not portfolio:
             raise RuntimeError("Portfolio snapshot missing; run reconcile first.")
+        snapshot_pointer = portfolio_doc_ref.path
+        if legacy_shape:
+            snapshot_pointer = f"{snapshot_pointer}#latest_portfolio"
 
         portfolio_updated_at = _parse_iso(portfolio.get('updated_at'))
         if portfolio_updated_at and now - portfolio_updated_at > freshness_delta:
@@ -194,7 +191,7 @@ class Allocation(Intent):
             'status': 'completed',
             'summary': summary_text,
             'context': {
-                'portfolio_snapshot_ref': f"{portfolio_doc_ref.path}#latest_portfolio@{portfolio.get('updated_at')}",
+                'portfolio_snapshot_ref': f"{snapshot_pointer}@{portfolio.get('updated_at')}",
                 'strategy_snapshots': strategy_snapshots,
                 'strategy_intents_refs': intent_refs,
                 'missing_strategies': missing_strategies,
@@ -244,6 +241,28 @@ class Allocation(Intent):
 
         return execution_payload
 
+    def _load_portfolio_snapshot(self) -> Tuple[Optional[Dict[str, Any]], Any, bool]:
+        """
+        Loads the latest reconciled portfolio.
+
+        Returns:
+            Tuple of (portfolio dict or None, DocumentReference used, bool indicating legacy embedded shape)
+        """
+        positions_ref = self._env.db.collection("positions").document(self._env.trading_mode)
+        latest_doc_ref = positions_ref.collection("latest_portfolio").document("snapshot")
+        latest_doc = latest_doc_ref.get()
+        if latest_doc.exists:
+            return latest_doc.to_dict() or {}, latest_doc_ref, False
+
+        legacy_doc = positions_ref.get()
+        if legacy_doc.exists:
+            legacy_payload = legacy_doc.to_dict() or {}
+            embedded = legacy_payload.get("latest_portfolio")
+            if isinstance(embedded, dict):
+                return embedded, positions_ref, True
+
+        return None, latest_doc_ref, False
+
     def _collect_strategy_targets(
         self,
         now: datetime,
@@ -256,7 +275,8 @@ class Allocation(Intent):
         Dict[str, Dict[str, Any]]
     ]:
         strategies_ref = self._env.db.collection('strategies')
-        docs = list(strategies_ref.stream())
+        streamed_docs = list(strategies_ref.stream())
+        snapshot_map = {doc.id: doc for doc in streamed_docs}
 
         snapshots: List[Dict[str, Any]] = []
         intent_refs: List[str] = []
@@ -264,17 +284,22 @@ class Allocation(Intent):
         missing_strategies: List[str] = []
         aggregated_targets: Dict[str, Dict[str, Any]] = {}
 
-        allowed_ids = set(self._strategy_ids) if self._strategy_ids else None
+        allowed_ids = [s for s in self._strategy_ids] if self._strategy_ids else None
+        candidate_ids = allowed_ids or list(snapshot_map.keys())
 
-        for doc in docs:
-            strategy_id = doc.id
-            strategy_config = doc.to_dict() or {}
-            if allowed_ids is not None and strategy_id not in allowed_ids:
-                continue
+        for strategy_id in candidate_ids:
+            if strategy_id in snapshot_map:
+                doc_snapshot = snapshot_map[strategy_id]
+            else:
+                doc_snapshot = strategies_ref.document(strategy_id).get()
+
+            doc_ref = doc_snapshot.reference if getattr(doc_snapshot, "reference", None) else strategies_ref.document(strategy_id)
+            strategy_config = doc_snapshot.to_dict() or {}
+
             if allowed_ids is None and not strategy_config.get('enabled', True):
                 continue
 
-            intent_ref = doc.reference.collection('intent').document('latest')
+            intent_ref = doc_ref.collection('intent').document('latest')
             intent_doc = intent_ref.get()
             intent_data = intent_doc.to_dict() if intent_doc.exists else None
 
@@ -290,7 +315,7 @@ class Allocation(Intent):
                 missing_strategies.append(strategy_id)
                 continue
 
-            intent_refs.append(f"{intent_doc.reference.path}@{intent_data.get('updated_at')}")
+            intent_refs.append(f"{intent_ref.path}@{intent_data.get('updated_at')}")
             updated_at = _parse_iso(intent_data.get('updated_at'))
             if updated_at and now - updated_at > freshness_delta:
                 stale_strategies.append(strategy_id)
@@ -318,11 +343,5 @@ class Allocation(Intent):
                     'strategy_id': strategy_id,
                     'quantity': quantity
                 })
-
-        if allowed_ids:
-            existing = {snap['strategy_id'] for snap in snapshots}
-            for requested in allowed_ids:
-                if requested not in existing:
-                    missing_strategies.append(requested)
 
         return snapshots, intent_refs, stale_strategies, missing_strategies, aggregated_targets

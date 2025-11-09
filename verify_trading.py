@@ -22,7 +22,16 @@ def load_common_config(client: firestore.Client) -> Dict:
 
 
 def load_portfolio_snapshot(client: firestore.Client, trading_mode: str) -> Dict:
-    # Preferred shape: positions/{mode} document with embedded snapshot
+    # Preferred shape: positions/{mode}/latest_portfolio/snapshot document
+    preferred_path = f"positions/{trading_mode}/latest_portfolio/snapshot"
+    try:
+        doc = client.document(preferred_path).get()
+    except ValueError:
+        doc = None
+    if doc and doc.exists:
+        return doc.to_dict() or {}
+
+    # Backward compatible shape: positions/{mode} document embedding latest_portfolio
     mode_doc = client.collection("positions").document(trading_mode).get()
     if mode_doc.exists:
         data = mode_doc.to_dict() or {}
@@ -30,14 +39,14 @@ def load_portfolio_snapshot(client: firestore.Client, trading_mode: str) -> Dict
         if isinstance(embedded, dict):
             return embedded
 
-    # Legacy shape: document at positions/{mode}/latest_portfolio
-    portfolio_path = f"positions/{trading_mode}/latest_portfolio"
+    # Legacy document directly at positions/{mode}/latest_portfolio
+    legacy_path = f"positions/{trading_mode}/latest_portfolio"
     try:
-        doc = client.document(portfolio_path).get()
+        legacy_doc = client.document(legacy_path).get()
     except ValueError:
-        doc = None
-    if doc and doc.exists:
-        return doc.to_dict() or {}
+        legacy_doc = None
+    if legacy_doc and legacy_doc.exists:
+        return legacy_doc.to_dict() or {}
 
     return {}
 

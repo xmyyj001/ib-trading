@@ -65,8 +65,11 @@ class Reconcile(Intent):
             "open_orders": open_orders
         }
 
-        doc_ref = self._env.db.collection("positions").document(self._env.trading_mode)
-        doc_ref.set({"latest_portfolio": payload}, merge=True)
+        positions_ref = self._env.db.collection("positions").document(self._env.trading_mode)
+        latest_snapshot_ref = positions_ref.collection("latest_portfolio").document("snapshot")
+        latest_snapshot_ref.set(payload)
+        # Keep legacy embedded shape for backward compatibility during rollout.
+        positions_ref.set({"latest_portfolio": payload}, merge=True)
 
         self._activity_log.update(status="success", reconciledHoldings=len(holdings), openOrders=len(open_orders))
         return payload
