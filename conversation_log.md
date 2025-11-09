@@ -86,3 +86,7 @@
     - Created the new `orchestrator-daily-run` Scheduler job in `us-central1`, ran it manually to trigger Cloud Run, and confirmed logs show the expected warm-up sequence.  
     - Deleted legacy jobs in `asia-east1` (`daily-reconciliation-job`, `eod-allocation-job`, `high-frequency-test-runner`) to avoid duplicate triggers; only the new dry-run job remains enabled.  
     - Next adjustment is to update the Scheduler payload to `dryRun:false` once ready for live execution.
+19. **Exposure Guardrails (2025-11-09 05:00 UTC)**  
+    - Added `setting_firestore.py` to write the 33/33/34 exposure split plus per-strategy `allowed_symbols`/`max_notional`, and ran it (with/without `--dry-run`) against `gold-gearbox-424413-k1`.  
+    - Updated Commander (`intents/allocation.py`) to enforce those guardrails via `_apply_guardrails`, including symbol filtering and notional clamping; strategies now emit `price` with each target.  
+    - Extended unit tests to cover the new logic and re-ran the entire suite successfully.

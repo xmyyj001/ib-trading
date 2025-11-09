@@ -46,6 +46,27 @@ def _normalize_contract_for_order(contract: Contract, plan: Dict[str, Any]) -> N
         contract.exchange = 'SMART'
 
 
+def _infer_target_symbol(target: Dict[str, Any], contract_info: Dict[str, Any]) -> Optional[str]:
+    return target.get('symbol') or contract_info.get('symbol')
+
+
+def _infer_target_price(target: Dict[str, Any], contract_info: Dict[str, Any]) -> Optional[float]:
+    price_fields = ('price', 'last_price', 'lastPrice')
+    contract_price_fields = ('price', 'marketPrice', 'lastTradePrice', 'avgCost')
+
+    for field in price_fields:
+        value = target.get(field)
+        if isinstance(value, (int, float)):
+            return float(value)
+
+    for field in contract_price_fields:
+        value = contract_info.get(field)
+        if isinstance(value, (int, float)):
+            return float(value)
+
+    return None
+
+
 class Allocation(Intent):
     """
     Commander intent:
@@ -326,8 +347,11 @@ class Allocation(Intent):
 
             for target in intent_data.get('target_positions', []):
                 contract_info = target.get('contract', {})
+                guardrail_quantity = self._apply_guardrails(strategy_id, strategy_config, target, contract_info)
+                if guardrail_quantity is None or guardrail_quantity == 0:
+                    continue
                 key = _contract_key(contract_info)
-                quantity = int(target.get('quantity', 0))
+                quantity = guardrail_quantity
                 if key not in aggregated_targets:
                     aggregated_targets[key] = {
                         'contract': contract_info,
@@ -345,3 +369,64 @@ class Allocation(Intent):
                 })
 
         return snapshots, intent_refs, stale_strategies, missing_strategies, aggregated_targets
+
+    def _apply_guardrails(
+        self,
+        strategy_id: str,
+        strategy_config: Dict[str, Any],
+        target: Dict[str, Any],
+        contract_info: Dict[str, Any],
+    ) -> Optional[int]:
+        quantity = int(target.get('quantity', 0))
+        if quantity == 0:
+            return 0
+
+        symbol = _infer_target_symbol(target, contract_info)
+        allowed = strategy_config.get('allowed_symbols')
+        if allowed and symbol and symbol not in allowed:
+            self._env.logging.warning(
+                "Strategy %s target for %s dropped; symbol not in allowed list.",
+                strategy_id,
+                symbol
+            )
+            return None
+
+        max_notional_raw = strategy_config.get('max_notional')
+        try:
+            max_notional = float(max_notional_raw)
+        except (TypeError, ValueError):
+            max_notional = 0.0
+
+        if max_notional > 0:
+            price = _infer_target_price(target, contract_info)
+            if price and price > 0:
+                max_quantity = int(max_notional // price)
+                if max_quantity == 0:
+                    self._env.logging.warning(
+                        "Strategy %s target for %s trimmed to 0; max_notional %.2f too small for price %.2f",
+                        strategy_id,
+                        symbol,
+                        max_notional,
+                        price
+                    )
+                    return None
+                if abs(quantity) > max_quantity:
+                    trimmed_quantity = max_quantity if quantity > 0 else -max_quantity
+                    self._env.logging.info(
+                        "Strategy %s target for %s trimmed from %d to %d due to max_notional %.2f",
+                        strategy_id,
+                        symbol,
+                        quantity,
+                        trimmed_quantity,
+                        max_notional
+                    )
+                    quantity = trimmed_quantity
+            else:
+                self._env.logging.warning(
+                    "Strategy %s target for %s lacks price; cannot enforce max_notional %.2f",
+                    strategy_id,
+                    symbol,
+                    max_notional
+                )
+
+        return quantity

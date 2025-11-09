@@ -324,6 +324,7 @@ class SpyMacdVixyIntent(Intent):
                 "secType": contract.secType,
                 "exchange": contract.exchange,
                 "currency": contract.currency,
+                "price": float(price),
                 "quantity": int(target_quantity),
                 "contract": _contract_dict(contract)
             })

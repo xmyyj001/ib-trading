@@ -129,6 +129,7 @@ class TestSignalGenerator(Intent):
                 "exchange": spy_instrument.contract.exchange,
                 "currency": spy_instrument.contract.currency,
                 "quantity": int(target_quantity),
+                "price": float(last_price),
                 "contract": _contract_dict(spy_instrument.contract)
             }]
 

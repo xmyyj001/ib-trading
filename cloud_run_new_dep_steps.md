@@ -200,6 +200,9 @@ python verify_trading.py  --show-intents --project-id gold-gearbox-424413-k1 --s
         --project=gold-gearbox-424413-k1 \
         --location=us-central1
 
+      sleep 1m
+      echo "manualy run scheduler job, done"
+
       gcloud logging read \
         'resource.type="cloud_run_revision" AND resource.labels.service_name="ib-paper"' \
         --project=gold-gearbox-424413-k1 \

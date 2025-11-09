@@ -230,6 +230,7 @@ class AllocationIntentTests(unittest.TestCase):
                         'exchange': 'SMART',
                         'currency': 'USD',
                         'quantity': 20,
+                        'price': 100.0,
                         'contract': {'conId': 1001, 'symbol': 'SPY', 'secType': 'STK', 'exchange': 'SMART', 'currency': 'USD'}
                     }
                 ]
@@ -259,6 +260,89 @@ class AllocationIntentTests(unittest.TestCase):
         # Execution log should be recorded
         self.assertEqual(len(self.execution_sink), 1)
         self.assertEqual(self.execution_sink[0]['orders'][0]['simulated'], True)
+
+    def test_guardrail_drops_disallowed_symbol(self):
+        now = datetime.now(timezone.utc).isoformat()
+        portfolio_doc = {
+            'updated_at': now,
+            'holdings': [],
+            'open_orders': []
+        }
+        strategy_doc = FakeStrategyDoc(
+            'guarded',
+            {'enabled': True, 'allowed_symbols': ['SPY']},
+            {
+                'status': 'success',
+                'updated_at': now,
+                'target_positions': [
+                    {
+                        'symbol': 'QQQ',
+                        'secType': 'STK',
+                        'exchange': 'NASDAQ',
+                        'currency': 'USD',
+                        'quantity': 50,
+                        'price': 100.0,
+                        'contract': {'conId': 3001, 'symbol': 'QQQ', 'secType': 'STK', 'exchange': 'NASDAQ', 'currency': 'USD'}
+                    }
+                ]
+            }
+        )
+        env = SimpleNamespace(
+            db=FakeDB(portfolio_doc, [strategy_doc], []),
+            ibgw=FakeIBGW(),
+            logging=SimpleNamespace(info=lambda *args, **kwargs: None,
+                                    warning=lambda *args, **kwargs: None,
+                                    error=lambda *args, **kwargs: None),
+            trading_mode='paper',
+            env={'K_REVISION': 'localhost'},
+            config={}
+        )
+        allocation = Allocation(env, dryRun=True, strategies=['guarded'])
+        result = asyncio.run(allocation._core_async())
+        self.assertEqual(result['decision']['diff'], [])
+
+    def test_guardrail_clamps_max_notional(self):
+        now = datetime.now(timezone.utc).isoformat()
+        portfolio_doc = {
+            'updated_at': now,
+            'holdings': [],
+            'open_orders': []
+        }
+        strategy_doc = FakeStrategyDoc(
+            'guarded',
+            {'enabled': True, 'max_notional': 1000.0},
+            {
+                'status': 'success',
+                'updated_at': now,
+                'target_positions': [
+                    {
+                        'symbol': 'SPY',
+                        'secType': 'STK',
+                        'exchange': 'SMART',
+                        'currency': 'USD',
+                        'quantity': 100,
+                        'price': 50.0,
+                        'contract': {'conId': 4001, 'symbol': 'SPY', 'secType': 'STK', 'exchange': 'SMART', 'currency': 'USD'}
+                    }
+                ]
+            }
+        )
+        env = SimpleNamespace(
+            db=FakeDB(portfolio_doc, [strategy_doc], []),
+            ibgw=FakeIBGW(),
+            logging=SimpleNamespace(info=lambda *args, **kwargs: None,
+                                    warning=lambda *args, **kwargs: None,
+                                    error=lambda *args, **kwargs: None),
+            trading_mode='paper',
+            env={'K_REVISION': 'localhost'},
+            config={}
+        )
+        allocation = Allocation(env, dryRun=True, strategies=['guarded'])
+        result = asyncio.run(allocation._core_async())
+        self.assertEqual(len(result['decision']['diff']), 1)
+        planned = result['decision']['diff'][0]
+        self.assertEqual(planned['symbol'], 'SPY')
+        self.assertEqual(planned['quantity'], 20)  # 1000 / 50 = 20 max shares
 
     def test_allocation_places_smart_routed_sell_order(self):
         recording_ibgw = RecordingIBGW()

@@ -56,41 +56,40 @@ python3 -m unittest
 
 ---
 
-## 2. 核心设计原则 (截至 2025-10-25 的版本)
+## 2. 核心设计原则（2025-11 更新）
 
-经过多轮的实盘调试与迭代，本系统当前遵循以下核心设计原则，这对于理解系统的行为至关重要：
+Cloud Run 上最新一轮部署已经把“策略直接下单”改造成“策略发布 → Commander 执行”的混合架构。以下原则概括了现在的运行方式：
 
-### 2.1 策略意图 (Strategy Intent) 是决策的唯一核心
+### 2.1 策略意图生成目标，Commander 统一执行
 
-*   **职责**: 每个策略意图（如 `test_signal_generator`）都是一个独立的、自包含的交易决策单元。
-*   **状态来源**: 为了确保决策的绝对准确性和及时性，策略意图在每次运行时，**必须直接查询盈透证券 (IB)** 获取最实时的状态，包括：
-    1.  **真实持仓 (`ib.portfolio()`)**: 这是计算目标仓位的基础。
-    2.  **在途订单 (`ib.openTrades()`)**: 用于防止在市场波动或并发执行时下达重复订单。
-*   **执行**: 策略意图在完成所有计算和保证金检查后，直接执行下单操作 (`placeOrder`)。
+* **职责拆分**：每个策略意图（如 `test_signal_generator`, `spy_macd_vixy`）仅负责读取 IB 数据、计算目标仓位，并写入 `strategies/{id}/intent/latest`。
+* **状态来源**：策略仍直接从 IB Gateway 获取真实持仓 (`portfolio()`)、在途订单 (`openTrades()`)、净值等，以便生成精准的目标数量，避免重复下单。
+* **执行链路**：`orchestrator` Intent 顺序执行“策略 → `reconcile` → `allocation`”，Commander 统一从 Firestore 读取意图与对账快照，应用 `allowed_symbols`/`max_notional` guardrail，再下发真实订单（或在 dry-run 中模拟）。
 
-### 2.2 `trade_reconciliation` 仍在完善中
+### 2.2 `reconcile` 是事实来源，`trade_reconciliation` 仍在调试
 
-*   **现状**: 当前代码仅实现了**实时持仓快照**写入 Firestore (`positions/{mode}/holdings/all_positions`)。对成交记录的审计流程还在调试阶段，尚未稳定。
-*   **风险提示**: 在 Google Cloud Run 中运行该意图时，会因为 Firestore 异步 API 的兼容性问题抛出异常；因此暂不建议在生产环境中依赖它更新订单状态。
-*   **后续规划**: 完成异步 Firestore 客户端的接入后，再恢复对 `activity` 集合的更新与审计。
+* `/reconcile` 会写入 `positions/{mode}/latest_portfolio/snapshot`，其中包含 `updated_at`、净值、持仓、未结订单，是 Commander 的唯一事实来源。
+* `/trade-reconciliation` 继续保留历史持仓写入逻辑，但成交审计仍未恢复；生产场景请以 `/reconcile` 为准。
 
-### 2.3 Firestore 的定位
+### 2.3 Firestore 承担“意图总线”角色
 
-*   **`config` 集合**: 作为系统的静态配置中心，存储交易开关、风险参数等。
-*   **`activity` 集合**: 作为所有交易行为的**事件日志 (Event Log)**。目前只有部分意图（例如 `test_signal_generator`）会写入订单信息；审计流程仍在回归测试中。
-*   **`positions/holdings` 集合**: 依然被 `Strategy`、`CloseAll` 等逻辑读取，以便计算虚拟持仓与针对性平仓。虽然真实持仓以 IB 为准，但 Firestore 持仓文档仍扮演辅助角色，属于历史设计遗留，更新策略需谨慎。
+* `config/common`：存储整体曝光、策略权重、特性开关等。
+* `strategies/{id}/intent/latest`：策略的最新目标文档，包含 `metadata`（信号、理由、最后价格等）。
+* `positions/{mode}/latest_portfolio/snapshot`：`/reconcile` 写入的真实持仓与未结订单。
+* `executions/{exec_id}`：Commander 的执行记录，串联引用了哪份持仓快照、哪些策略意图，以及规划/下发的订单。
 
-### 2.4 已知风险与未来演进
+### 2.4 风险与 guardrail
 
-*   **风险**: 当前“策略即意图”模式的一个已知风险是，**系统无法自动感知并响应在IB TWS或手机端等外部进行的手动仓位调整**。因为策略的决策起点是其自身的逻辑，如果外部操作改变了仓位，策略可能会在下一次运行时“纠正”这个变化，从而与交易员的意图相悖。
-*   **演进方向**: 未来的一个可选演进方向是“**对账先行**”模式。即在每次决策前，强制先运行一个对账任务，将IB的真实仓位写入 Firestore，然后所有策略都基于这个 Firestore 的“快照”进行计算。这可以解决外部仓位变化的同步问题，但会增加系统的复杂性。当前版本为了保持简洁和稳定，暂未采用此模式。
+* **手动干预**：如果在 TWS/移动端手动下单，必须依靠下一次 `/reconcile` 同步之后 Commander 才能感知差异。
+* **策略约束**：Commander 会读取 Firestore 中的 `allowed_symbols`、`max_notional`。不在白名单内的标的直接丢弃，超过金额阈值的目标被截断并在日志中记录。
+* **凭证可用性**：Secret Manager 的 IB 凭证失效会导致 orchestrator 503；上线前需通过 `gcloud secrets versions access` 或一次 dry-run `/` 验证。
 
-### 2.5 待办修订计划
+### 2.5 当前待办
 
-*   **恢复 `trade_reconciliation` 审计**: 引入异步 Firestore 客户端或改造当前逻辑，确保在 Cloud Run 中可以安全更新 `activity` 集合。
-*   **整理 Firestore `holdings` 使用方式**: 评估哪些策略仍需引用仓位快照，决定是继续维护文档还是迁移到纯 IB 数据流。
-*   **重新启用 `allocation` 架构**: 在完成异步重构与依赖清理后，再次验证“总指挥”模式，并补全缺失的 API 端点。
-*   **策略扩展**: 将 `spy_macd_vixy` 等策略升级到“策略即意图”范式，补齐端到端测试后再部署。
+* **多策略迁移**：把旧策略迁入新意图模型，补充 Firestore 权重及 guardrail 配置。
+* **Secret & 凭证治理**：为 `ib-*-username/password` 制定轮换与监控策略。
+* **监控告警**：基于 Cloud Logging / Error Reporting 对 orchestrator 503、IB 断线、意图缺失等关键信号建立告警。
+* **Scheduler 正式化**：`orchestrator-daily-run` 已在 us-central1 干跑；确认 guardrail 后即可把 Scheduler payload 改为 `dryRun:false` 投入真实下单。
 
 ---
 
