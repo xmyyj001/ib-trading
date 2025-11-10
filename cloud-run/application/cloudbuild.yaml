@@ -60,8 +60,12 @@ steps:
       - '-c'
       - |
         set -e
-        pip install --quiet google-cloud-firestore packaging
-        python scripts/firestore/init_firestore.py "$PROJECT_ID"
+        if [ "$_INIT_FIRESTORE" = "true" ]; then
+          pip install --quiet google-cloud-firestore packaging
+          python scripts/firestore/init_firestore.py "$PROJECT_ID"
+        else
+          echo "Skipping Firestore init step (_INIT_FIRESTORE=false)"
+        fi
     waitFor: ['Push-Application']
 
   # Step 6: Integration tests placeholder (currently skipped)
@@ -114,5 +118,6 @@ substitutions:
   _USERNAME_SECRET: 'ib-paper-username'
   _PASSWORD_SECRET: 'ib-paper-password'
   _TWS_VERSION: '1037'
+  _INIT_FIRESTORE: 'true'
 
 timeout: '1800s'

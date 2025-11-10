@@ -124,14 +124,32 @@ cd ../..
 
 ```bash
 # 确保您位于项目根目录 (ib-trading)
-gcloud builds submit --config cloud-run/application/cloudbuild.yaml .
+gcloud builds submit --config cloud-run/application/cloudbuild.yaml . \
+  --substitutions _REGION=${GCP_REGION},_SERVICE_NAME=${CLOUD_RUN_SERVICE_NAME},_TRADING_MODE=${TRADING_MODE},_INIT_FIRESTORE=true
 ```
 
-### 步骤 7: 验证 Cloud Run 服务
+> **重要**：Cloud Build 第 5 步会运行 `scripts/firestore/init_firestore.py` 并覆盖 `config/common`、`config/{mode}` 文档。若生产环境不希望重置 Firestore，可在 `--substitutions` 中将 `_INIT_FIRESTORE=false`（或直接注释该步骤），并部署完成后立即运行 `scripts/firestore/setting_firestore.py` 重新写入真实曝光与 guardrail（见下一步）。
+
+### 步骤 7: 回写 Firestore 配置（部署后立即执行）
+
+```bash
+python scripts/firestore/setting_firestore.py \
+  --project-id ${PROJECT_ID} \
+  --overall-exposure 0.90 \
+  --testsignalgenerator-weight 0.33 \
+  --spy-macd-vixy-weight 0.33 \
+  --reserve-weight 0.34 \
+  --testsignalgenerator-max-notional 600000 \
+  --spy-macd-vixy-max-notional 600000
+```
+
+*如仅调整特定策略，可根据需要修改参数或使用 `--dry-run` 预览。若在 `gcloud builds submit` 时设置 `_INIT_FIRESTORE=false`，可跳过重置，本节仍可作为手动调参指南。*
+
+### 步骤 8: 验证 Cloud Run 服务
 
 部署完成后，你可以在 Google Cloud Console 的 Cloud Run 页面查看你的服务状态。服务名称将是 `${CLOUD_RUN_SERVICE_NAME}`。确认服务状态为 "Ready"。
 
-### 步骤 8: 为Cloud Run服务挂载凭据 (关键安全步骤)
+### 步骤 9: 为Cloud Run服务挂载凭据 (关键安全步骤)
 
 *   **目的**: 将您存储在“保险库”(Secret Manager)中的IB凭据，安全地传递给正在运行的Cloud Run服务。
 

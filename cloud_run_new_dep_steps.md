@@ -95,8 +95,9 @@
    gcloud builds submit \
      --region=${CLOUD_BUILD_REGION} \
      --config cloud-run/application/cloudbuild.yaml \
-     --substitutions=_REGION=${GCP_REGION},_SERVICE_NAME=${CLOUD_RUN_SERVICE_NAME},_SERVICE_ACCOUNT=${SERVICE_ACCOUNT_EMAIL},_TRADING_MODE=${TRADING_MODE},_BASE_IMAGE_URL=${BASE_IMAGE_URL},_APPLICATION_IMAGE=${APPLICATION_IMAGE},_IMAGE_TAG=${IMAGE_TAG},_USERNAME_SECRET=${IB_USERNAME_SECRET},_PASSWORD_SECRET=${IB_PASSWORD_SECRET}
+     --substitutions=_REGION=${GCP_REGION},_SERVICE_NAME=${CLOUD_RUN_SERVICE_NAME},_SERVICE_ACCOUNT=${SERVICE_ACCOUNT_EMAIL},_TRADING_MODE=${TRADING_MODE},_BASE_IMAGE_URL=${BASE_IMAGE_URL},_APPLICATION_IMAGE=${APPLICATION_IMAGE},_IMAGE_TAG=${IMAGE_TAG},_USERNAME_SECRET=${IB_USERNAME_SECRET},_PASSWORD_SECRET=${IB_PASSWORD_SECRET},_INIT_FIRESTORE=true
    ```
+   *如需保留 Firestore 现有配置，可将 `_INIT_FIRESTORE=false` 并在部署完成后手动运行 `scripts/firestore/setting_firestore.py` 进行增量更新。*
    *Build 完成后会自动 push 镜像并触发部署；Artifact Registry 中应出现带新 tag 的 `application` 镜像。*
 
 2. **记录构建版本**：留存 `BUILD_ID` 与镜像 tag，方便回滚。  
@@ -107,7 +108,24 @@
    --format='value(images[0])'
    ```
 
-## 6. 部署 Cloud Run 服务
+## 6. 部署后回写 Firestore 配置
+
+> Cloud Build 仍会执行 `scripts/firestore/init_firestore.py`，部署完成后必须重新写入实际曝光与 guardrail，否则 Commander 会读取默认的 1.0/1.0 配置。
+
+```bash
+python scripts/firestore/setting_firestore.py \
+  --project-id ${PROJECT_ID} \
+  --overall-exposure 0.90 \
+  --testsignalgenerator-weight 0.33 \
+  --spy-macd-vixy-weight 0.33 \
+  --reserve-weight 0.34 \
+  --testsignalgenerator-max-notional 600000 \
+  --spy-macd-vixy-max-notional 600000
+```
+
+如需仅更新部分策略，可添加自定义参数或 `--dry-run` 预览；若打算完全避免重置，可在 `cloud-run/application/cloudbuild.yaml` 注释 `Initialize-Firestore` 步骤后改为手动执行此脚本。
+
+## 7. 部署 Cloud Run 服务
 
 Cloud Build 的 `Deploy-to-Cloud-Run` 步骤会自动发布新修订。完成后执行以下命令确认部署结果。
 
@@ -127,7 +145,7 @@ Cloud Build 的 `Deploy-to-Cloud-Run` 步骤会自动发布新修订。完成后
    ```
    *只有当 `latestCreated` 与 `latestReady` 一致时，服务才算完成发布。*
 
-## 7. 部署后验证
+## 8. 部署后验证
 
 1. **日志确认**：在 Cloud Logging 中筛选新修订的 `stdout`/`stderr`，确认 IB Gateway 登录成功、`spy_macd_vixy` 与 `reconcile` 执行无异常。
    ```bash

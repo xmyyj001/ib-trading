@@ -68,8 +68,12 @@ steps:
     - -c
     - |
       set -e
-      pip install --quiet google-cloud-firestore
-      python scripts/firestore/init_firestore.py "${PROJECT_ID}"
+      if [ "$_INIT_FIRESTORE" = "true" ]; then
+        pip install --quiet google-cloud-firestore
+        python scripts/firestore/init_firestore.py "${PROJECT_ID}"
+      else
+        echo "Skipping Firestore init step (_INIT_FIRESTORE=false)"
+      fi
     waitFor: ['Push-Application']
 
   # 步骤 7: 运行集成测试 (已修复)
@@ -124,5 +128,6 @@ substitutions:
   _GCP_REGION: asia-east1
   _TRADING_MODE: paper
   _MY_IMAGE_TAG: "latest"
+  _INIT_FIRESTORE: "true"
 
 timeout: "1800s"
