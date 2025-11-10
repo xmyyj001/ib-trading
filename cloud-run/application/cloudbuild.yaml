@@ -61,7 +61,7 @@ steps:
       - |
         set -e
         pip install --quiet google-cloud-firestore packaging
-        python cloud-run/application/app/lib/init_firestore.py "$PROJECT_ID"
+        python scripts/firestore/init_firestore.py "$PROJECT_ID"
     waitFor: ['Push-Application']
 
   # Step 6: Integration tests placeholder (currently skipped)

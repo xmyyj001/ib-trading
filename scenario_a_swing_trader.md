@@ -127,7 +127,7 @@
 
 ---
 
-##  初始化Firestore `init_firestore.py` 
+##  初始化Firestore `scripts/firestore/init_firestore.py` 
 在首次部署或需要重置数据库配置时，推荐使用以下脚本来初始化 Firestore。此脚本专为**场景A（波段交易）**定制，包含了所有必要的安全和交易参数。
 
 为确保本文档的完整性，此处提供与上述进阶方案完全兼容的 `spymacdvixy.py` 策略代码。

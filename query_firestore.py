@@ -74,15 +74,21 @@ if __name__ == "__main__":
     # 1. 查询 config 集合
     query_collection('config')
 
-    # 2. 查询 holdings 集合 (新架构)
-    print(f"\n---  查询持仓快照 (新架构) ---")
+    # 2. 查询最新快照 (优先 new snapshot, 回退 legacy holdings)
+    print(f"\n---  查询持仓快照 (positions/{trading_mode}/latest_portfolio/snapshot) ---")
     try:
-        holdings_doc_ref = db.document(f'positions/{trading_mode}/holdings/all_positions')
-        doc = holdings_doc_ref.get()
-        if doc.exists:
-            print_doc(doc)
+        snapshot_ref = db.document(f'positions/{trading_mode}/latest_portfolio/snapshot')
+        snapshot_doc = snapshot_ref.get()
+        if snapshot_doc.exists:
+            print_doc(snapshot_doc)
         else:
-            print("  (没有找到 'all_positions' 持仓快照文档)")
+            print("  (未找到 snapshot 文档，尝试 legacy holdings/all_positions)")
+            holdings_doc_ref = db.document(f'positions/{trading_mode}/holdings/all_positions')
+            doc = holdings_doc_ref.get()
+            if doc.exists:
+                print_doc(doc)
+            else:
+                print("  (legacy 持仓文档也不存在)")
     except Exception as e:
         print(f"错误: 查询持仓快照失败: {e}")
 

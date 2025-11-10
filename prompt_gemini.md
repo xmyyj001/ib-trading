@@ -39,7 +39,8 @@ Generation Time: 2025-07-03 23:01:04
     *   [`cloud-run/application/Dockerfile`](cloud-run/application/Dockerfile): 定义了 `application` 镜像的构建过程，包括复制应用程序代码和安装 Python 依赖。
     *   [`cloud-run/application/app/main.py`](cloud-run/application/app/main.py): 应用程序的入口点，使用 Falcon 框架暴露 HTTP 接口。它根据传入的 `intent` 参数调用不同的交易逻辑模块。
     *   `cloud-run/application/app/intents/`: 包含各种交易“意图”的模块，例如 `allocation.py`, `cash_balancer.py`, `close_all.py`, `collect_market_data.py`, `summary.py`, `trade_reconciliation.py`。每个意图都封装了特定的交易操作。
-    *   `cloud-run/application/app/lib/`: 包含辅助库，如 `environment.py` (环境配置), `gcp.py` (GCP 服务交互), `ibgw.py` (IB Gateway 交互), `init_firestore.py` (Firestore 初始化), `trading.py` (交易辅助函数)。
+    *   `cloud-run/application/app/lib/`: 包含辅助库，如 `environment.py` (环境配置), `gcp.py` (GCP 服务交互), `ibgw.py` (IB Gateway 交互), `trading.py` (交易辅助函数)。
+    *   `scripts/firestore/`: 运营脚本（`init_firestore.py`, `setting_firestore.py`）用于初始化/更新 Firestore 配置与策略 guardrail。
     *   `cloud-run/application/app/strategies/`: 包含交易策略的模块，例如 `dummy.py`。
     *   [`cloud-run/application/cmd.sh`](cloud-run/application/cmd.sh): 应用程序的启动脚本，通常会启动 Gunicorn 服务器来运行 `main.py`。
 
@@ -238,7 +239,7 @@ steps:
     - |
       set -e
       pip install --quiet google-cloud-firestore
-      python cloud-run/application/app/lib/init_firestore.py "${PROJECT_ID}"
+      python scripts/firestore/init_firestore.py "${PROJECT_ID}"
     waitFor: ['Push-Application']
 
 # 步骤 7: 运行集成测试 (暂时跳过)
@@ -423,6 +424,5 @@ exec "${IBC_PATH}/scripts/ibcstart.sh" \
     "--tws-path=${TWS_PATH}" \
     "--ibc-path=${IBC_PATH}" \
     "--ibc-ini=${IBC_PATH}/config.ini"
-
 
 

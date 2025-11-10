@@ -437,7 +437,7 @@ class EodCheck(Intent):
 
 在首次部署或需要重置数据库配置时，推荐使用以下脚本来初始化 Firestore。此脚本专为**场景D（混合模式日内交易）**定制。
 
-### `init_firestore.py` (场景D版本)
+### `scripts/firestore/init_firestore.py` (场景D版本)
 
 ```python
 import sys

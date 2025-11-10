@@ -23,11 +23,11 @@ config_data = {
         "exposure": {
             "overall": 0.9,
             "strategies": {
-                "spy_macd_vixy": 1.0,
-                "testsignalgenerator": 1.0, # Correctly added here
-                "dummy": 1.0
+                "testsignalgenerator": 0.33,
+                "spy_macd_vixy": 0.33,
+                "reserve_pool": 0.34
             }
-        }
+        },
     },
     "paper": {
         "account": "DU1888364"

@@ -69,7 +69,7 @@ steps:
     - |
       set -e
       pip install --quiet google-cloud-firestore
-      python cloud-run/application/app/lib/init_firestore.py "${PROJECT_ID}"
+      python scripts/firestore/init_firestore.py "${PROJECT_ID}"
     waitFor: ['Push-Application']
 
   # 步骤 7: 运行集成测试 (已修复)

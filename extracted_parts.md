@@ -65,7 +65,6 @@ Showing up to 200 items (files + folders). Folders or files indicated with ... c
 │   │       │   ├───environment.py
 │   │       │   ├───gcp.py
 │   │       │   ├───ibgw.py
-│   │       │   ├───init_firestore.py
 │   │       │   ├───trading.py
 │   │       │   └───_tests/
 │   │       │       ├───__init__.py
@@ -88,6 +87,10 @@ Showing up to 200 items (files + folders). Folders or files indicated with ... c
 │       ├───cmd.sh
 │       ├───Dockerfile
 │       ├───Dockerfile.old
+├───scripts/
+│   └───firestore/
+│       ├───init_firestore.py
+│       └───setting_firestore.py
 │       └───ibc/
 │           ├───config.ini
 │           ├───gatewaystart.sh

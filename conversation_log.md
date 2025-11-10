@@ -90,3 +90,7 @@
     - Added `setting_firestore.py` to write the 33/33/34 exposure split plus per-strategy `allowed_symbols`/`max_notional`, and ran it (with/without `--dry-run`) against `gold-gearbox-424413-k1`.  
     - Updated Commander (`intents/allocation.py`) to enforce those guardrails via `_apply_guardrails`, including symbol filtering and notional clamping; strategies now emit `price` with each target.  
     - Extended unit tests to cover the new logic and re-ran the entire suite successfully.
+20. **Guardrail Dry-Run Validation (2025-11-09 06:32 UTC)**  
+    - Invoked the Cloud Run `/` endpoint with `dryRun:true` and observed Commander trimming `testsignalgenerator` from 2,689 → 894 shares per the `max_notional` limit, producing a single simulated SPY buy order with `missing=[]/stale=[]`.  
+    - Cloud Logging confirms the expected sequence (“策略 → 对账 → Commander”) plus the new INFO line `Strategy testsignalgenerator target ... trimmed due to max_notional`, proving guardrails are active in production.  
+    - Ready to flip the Scheduler payload to `dryRun:false` once remaining strategies migrate and operations approves.
