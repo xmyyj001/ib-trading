@@ -100,3 +100,8 @@
     - 更新 `query_firestore.py`，去掉强制按 `timestamp` 排序的限制，确保 `config` 集合可被列出。  
     - 通过 `python query_firestore.py` 与 `gcloud logging read` 确认配置生效，并在 paper 环境执行一次 `dryRun:false` orchestrator（880 股 SPY 实盘下单）验证 Commander 与 Firestore guardrail 配置一致。
 
+22. **新增 ib_macd_stoch 策略与 Guardrail 集成 (2025-11-13 14:45 UTC)**  
+    - 将 `ib_macd_stoch` 意图迁移到 `cloud-run/application/app/strategies/`, 在 orchestrator `STRATEGY_INTENT_REGISTRY` 中注册，并调整默认标的为 META/AMZN/TSLA/MSFT/AAPL。  
+    - 扩展 `scripts/firestore/setting_firestore.py`，新增 `--ib-macd-stoch-*` 权重/上限/allowed-symbol 参数，默认 0.20 配置，并在 `gold-gearbox-424413-k1` 上 dry-run + 实写，确保 `config/common.exposure` 与 `strategies/ib_macd_stoch` guardrail 就绪。  
+    - `cloudbuild.yaml` 默认 substitutions 改为使用 `${PROJECT_ID}`，修复 Cloud Build Step#0 “invalid reference format” 问题；本地 `python -m unittest` 通过，`verify_trading.py` 读取到 20/20/20/20 权重。  
+    - Cloud Run dry-run首次触发 `ib_macd_stoch` 时因 HMDS 返回空数据抛出 `'NoneType' object has no attribute 'empty'`；在策略中提前判断 `bars`/DataFrame 为空并抛出更清晰的 RuntimeError，后续可据此排查数据源问题。

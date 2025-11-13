@@ -47,7 +47,7 @@ class IndicatorSettings:
 class IbMacdStochIntent(Intent):
     """Commander-friendly strategy intent."""
 
-    DEFAULT_TICKERS: Sequence[str] = ("META", "AMZN", "TSLA", "MSFT", "AAPL")
+    DEFAULT_TICKERS: Sequence[str] = ("META", "AMZN", "TSLA", "MSFT")
 
     def __init__(self, env, **kwargs):
         super().__init__(env, **kwargs)
@@ -89,10 +89,25 @@ class IbMacdStochIntent(Intent):
             symbol_results = []
             active_signals = []
             for symbol in self._tickers:
-                evaluation = await self._evaluate_symbol(symbol)
-                symbol_results.append(evaluation)
+                try:
+                    evaluation = await self._evaluate_symbol(symbol)
+                except Exception as exc:  # noqa: BLE001
+                    self._env.logging.warning("Skipping symbol %s due to: %s", symbol, exc, exc_info=True)
+                    symbol_results.append(
+                        {
+                            "symbol": symbol,
+                            "status": "error",
+                            "error": str(exc),
+                        }
+                    )
+                    continue
+
+                symbol_results.append(self._serialize_symbol_evaluation(evaluation))
                 if evaluation["direction"] > 0:
                     active_signals.append(evaluation)
+
+            if not any(entry.get("status") == "success" for entry in symbol_results):
+                raise RuntimeError("All ticker evaluations failed; aborting strategy run.")
 
             target_positions: List[Dict[str, Any]] = []
             allocations: List[Dict[str, Any]] = []
@@ -200,6 +215,15 @@ class IbMacdStochIntent(Intent):
         if not qualified:
             raise RuntimeError(f"Failed to qualify contract for {symbol}.")
         return StockInstrument(self._env, ib_contract=qualified[0]).contract
+
+    @staticmethod
+    def _serialize_symbol_evaluation(evaluation: Dict[str, Any]) -> Dict[str, Any]:
+        serialized = dict(evaluation)
+        contract = serialized.pop("contract", None)
+        if contract:
+            serialized["contract"] = contract_to_dict(contract)
+        serialized["status"] = "success"
+        return serialized
 
     @staticmethod
     def _extract_account_value(account_values, tag: str, currency: str = "USD") -> float:

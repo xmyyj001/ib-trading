@@ -70,11 +70,14 @@
 
   - 部署最新镜像（gcloud builds submit ... + gcloud run deploy ...），确保新意图包含在镜像内。
   - 手动 dry-run orchestrator：
+   unset ORCHESTRATOR_URL
+   export ORCHESTRATOR_URL="https://ib-paper-599151217267.us-central1.run.app"
+      # 直接向 orchestrator 发送一次交易请求，重点是拿到响应中的 JSON 数据（策略状态、reconcile、commander 输出等），便于验证业务逻辑是否正常。
+   curl -X POST "${ORCHESTRATOR_URL}" \
+     -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
+     -H "Content-Type: application/json" \
+     -d '{"strategies":["ib_macd_stoch","testsignalgenerator","spy_macd_vixy"],"dryRun":true,"runReconcile":true}'
 
-    gcloud run services invoke ${CLOUD_RUN_SERVICE_NAME} \
-      --region ${GCP_REGION} \
-      --format=json \
-      --data='{"strategies":["ib_macd_stoch","testsignalgenerator","spy_macd_vixy"],"dryRun":true,"runReconcile":true}'
   - 浏览 Cloud Logging / activity 集合，确认 missing=[]、stale=[]，strategies/ib_macd_stoch/intent/latest 写入成功。
 
   调度与上线
