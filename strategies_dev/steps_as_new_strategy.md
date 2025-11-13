@@ -32,8 +32,8 @@
   - 准备环境：在部署目录 ~/deployments/ib-trading-deploy 下 source deployment_vars.sh，确保 PROJECT_ID 指向生产/测试项目。
   - 运行配置脚本（先 dry-run 查看 diff，确认后去掉 --dry-run）：
 
-    python scripts/firestore/setting_firestore.py \
-      --project-id ${PROJECT_ID} \
+ — ✅ 完成   python scripts/firestore/setting_firestore.py \
+      --project-id gold-gearbox-424413-k1 \
       --overall-exposure 0.90 \
       --ib-macd-stoch-weight 0.20 \
       --ib-macd-stoch-max-notional 400000 \
@@ -44,7 +44,7 @@
       --dry-run
   - 去掉 dry-run 后再次执行同命令，让权重/上限写入 config/common.exposure 和 strategies/ib_macd_stoch 文档。
 
-  代码接入
+  — ✅ 完成代码接入
 
   - 在 cloud-run/application/app/strategies/__init__.py 与 intents/orchestrator.py 的 STRATEGY_INTENT_REGISTRY 中追加：
 
@@ -58,11 +58,11 @@
   测试与验证
 
   - 新增单测 cloud-run/application/app/strategies/_tests/test_ib_macd_stoch.py，mock IB 数据验证 target_positions 与 metadata。
-  - 本地跑 python -m unittest discover -s _tests -t .。
-  - 使用 verify_trading.py 检查 Firestore：
+  — ✅ 完成- 本地跑 python -m unittest discover -s _tests -t .。
+  — ✅ 完成- 使用 verify_trading.py 检查 Firestore：
 
     python verify_trading.py \
-      --project-id ${PROJECT_ID} \
+      --project-id gold-gearbox-424413-k1 \
       --strategies ib_macd_stoch testsignalgenerator spy_macd_vixy \
       --show-intents
 
