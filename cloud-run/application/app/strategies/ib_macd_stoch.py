@@ -163,9 +163,12 @@ class IbMacdStochIntent(Intent):
             useRTH=True,
             timeout=30,
         )
+        if not bars:
+            raise RuntimeError(f"No historical data returned for {symbol}.")
+
         df = util.df(bars)
-        if df.empty:
-            raise RuntimeError(f"No historical data for {symbol}.")
+        if df is None or df.empty:
+            raise RuntimeError(f"Historical data frame is empty for {symbol}.")
         df = df.rename(columns=str.lower)
         df = df[["date", "open", "high", "low", "close"]].set_index("date")
 

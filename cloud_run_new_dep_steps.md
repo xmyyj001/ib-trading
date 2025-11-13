@@ -161,7 +161,7 @@ Cloud Build 的 `Deploy-to-Cloud-Run` 步骤会自动发布新修订。完成后
    curl -X POST "${ORCHESTRATOR_URL}" \
      -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
      -H "Content-Type: application/json" \
-     -d '{"strategies":["testsignalgenerator","spy_macd_vixy"],"dryRun":true,"runReconcile":true}'
+     -d '{"strategies":["ib_macd_stoch","testsignalgenerator","spy_macd_vixy"],"dryRun":true,"runReconcile":true}'
      
       # 加了 -i，会把 HTTP 响应头一起打印出来，用来确认状态码（200/503/500 等）、日期、Content-Type 等诊断信息，便于判断是业务失败还是网关未连上。
    curl -i -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
@@ -174,7 +174,7 @@ Cloud Build 的 `Deploy-to-Cloud-Run` 步骤会自动发布新修订。完成后
    ```
    gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="ib-paper"' \
       --project=gold-gearbox-424413-k1 \
-      --freshness=10m \
+      --freshness=5m \
       --format="table(timestamp, severity, textPayload)" 
       ```
 

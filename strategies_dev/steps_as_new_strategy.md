@@ -66,7 +66,7 @@
       --strategies ib_macd_stoch testsignalgenerator spy_macd_vixy \
       --show-intents
 
-  Cloud Run 验证
+   — ✅ 完成- Cloud Run 验证
 
   - 部署最新镜像（gcloud builds submit ... + gcloud run deploy ...），确保新意图包含在镜像内。
   - 手动 dry-run orchestrator：
