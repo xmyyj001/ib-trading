@@ -47,15 +47,16 @@ def query_collection(collection_path, limit=10):
     print(f"\n---  查询集合: {collection_path} (最多显示 {limit} 条) ---")
     try:
         collection_ref = db.collection(collection_path)
-        # 按时间戳降序排序（如果存在）
-        try:
-            query = collection_ref.order_by('timestamp', direction=firestore.Query.DESCENDING).limit(limit)
-            docs = query.stream()
-        except Exception:
-            # 如果没有 timestamp 字段，则不排序
-            docs = collection_ref.limit(limit).stream()
+        docs = list(collection_ref.stream())
 
-        doc_list = list(docs)
+        def _ts_key(doc):
+            data = doc.to_dict() or {}
+            ts = data.get('timestamp')
+            if hasattr(ts, "isoformat"):
+                return ts.isoformat()
+            return ts or ""
+
+        doc_list = sorted(docs, key=_ts_key, reverse=True)[:limit]
         if not doc_list:
             print("  (此集合中没有找到任何文档)")
             return

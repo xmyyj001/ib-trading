@@ -6,11 +6,13 @@ from intents.reconcile import Reconcile
 from intents.allocation import Allocation
 from strategies.test_signal_generator import TestSignalGenerator
 from strategies.spy_macd_vixy import SpyMacdVixyIntent
+from strategies.ib_macd_stoch import IbMacdStochIntent
 
 
 STRATEGY_INTENT_REGISTRY = {
     'testsignalgenerator': TestSignalGenerator,
     'spy_macd_vixy': SpyMacdVixyIntent,
+    'ib_macd_stoch': IbMacdStochIntent,
 }
 
 

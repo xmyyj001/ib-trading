@@ -42,31 +42,33 @@ def _parse_args() -> argparse.Namespace:
 
     # Exposure knobs
     parser.add_argument("--overall-exposure", type=_positive_float, default=0.90, help="Overall capital deployment ratio.")
-    parser.add_argument("--testsignalgenerator-weight", type=_positive_float, default=0.33, help="tests signalgenerator share (0-1).")
-    parser.add_argument("--spy-macd-vixy-weight", type=_positive_float, default=0.33, help="spy_macd_vixy share (0-1).")
-    parser.add_argument("--reserve-weight", type=_positive_float, default=None, help="Optional reserve bucket share (defaults to 1 - sum(strategy weights)).")
+    parser.add_argument("--testsignalgenerator-weight", type=_positive_float, default=0.20, help="test signal generator share (0-1).")
+    parser.add_argument("--spy-macd-vixy-weight", type=_positive_float, default=0.20, help="spy_macd_vixy share (0-1).")
+    parser.add_argument("--ib-macd-stoch-weight", type=_positive_float, default=0.20, help="ib_macd_stoch share (0-1).")
+    parser.add_argument("--reserve-weight", type=_positive_float, default=0.20, help="Reserve bucket share (0-1).")
 
     # Per-strategy guardrails
     parser.add_argument("--testsignalgenerator-max-notional", type=_positive_float, default=600_000.0)
     parser.add_argument("--spy-macd-vixy-max-notional", type=_positive_float, default=600_000.0)
+    parser.add_argument("--ib-macd-stoch-max-notional", type=_positive_float, default=600_000.0)
+    parser.add_argument(
+        "--ib-macd-stoch-allowed-symbols",
+        nargs="+",
+        default=["META", "AMZN", "TSLA", "MSFT", "AAPL"],
+        help="Allowed symbols for ib_macd_stoch guardrail.",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Print payloads without writing to Firestore.")
     return parser.parse_args()
 
 
 def _build_exposure_payload(args: argparse.Namespace) -> Dict[str, Any]:
-    reserve = args.reserve_weight
-    if reserve is None:
-        reserve = max(0.0, 1.0 - (args.testsignalgenerator_weight + args.spy_macd_vixy_weight))
-    return {
-        "exposure": {
-            "overall": round(args.overall_exposure, 6),
-            "strategies": {
-                "testsignalgenerator": round(args.testsignalgenerator_weight, 6),
-                "spy_macd_vixy": round(args.spy_macd_vixy_weight, 6),
-                "reserve_pool": round(reserve, 6),
-            },
-        }
+    strategies = {
+        "testsignalgenerator": round(args.testsignalgenerator_weight, 6),
+        "spy_macd_vixy": round(args.spy_macd_vixy_weight, 6),
+        "ib_macd_stoch": round(args.ib_macd_stoch_weight, 6),
+        "reserve_pool": round(args.reserve_weight, 6),
     }
+    return {"exposure": {"overall": round(args.overall_exposure, 6), "strategies": strategies}}
 
 
 def _build_strategy_payloads(args: argparse.Namespace) -> Dict[str, Dict[str, Any]]:
@@ -78,6 +80,10 @@ def _build_strategy_payloads(args: argparse.Namespace) -> Dict[str, Dict[str, An
         "spy_macd_vixy": {
             "allowed_symbols": ["SPY", "VIXY"],
             "max_notional": args.spy_macd_vixy_max_notional,
+        },
+        "ib_macd_stoch": {
+            "allowed_symbols": args.ib_macd_stoch_allowed_symbols,
+            "max_notional": args.ib_macd_stoch_max_notional,
         },
     }
 

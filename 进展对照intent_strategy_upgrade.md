@@ -5,9 +5,9 @@
 - ✅ **持仓快照与序列化**：`reconcile` 现已同步写入 `positions/{trading_mode}/latest_portfolio/snapshot`（同时保留嵌入式 `latest_portfolio` 以兼容旧逻辑）；自研 `lib/ib_serialization.contract_to_dict` 解决 ib_insync 兼容性并清理 Firestore 写入路径。
 - ✅ **单测/脚本验证**：`python -m unittest discover -s _tests -t .` 通过；`verify_trading.py --show-intents` 在 paper 环境输出最新指令与敞口；Cloud Run 实例经 `curl` 验证返回 200。
 - ✅ **云端验证（2025-11-09）**：部署后通过 `curl -X POST ${ORCHESTRATOR_URL}` 触发全链路（策略→对账→Commander），两个策略 `status=success`，Commander 日志 `missing=[]/stale=[]`，执行文档写入 `orders=[{"simulated":true,"symbol":"SPY","action":"BUY","quantity":2689}]`，验证策略规范化+总指挥决策闭环已在 Cloud Run 生效。
-- ✅ **策略预算 & 约束（2025-11-09）**：运行 `scripts/firestore/setting_firestore.py` 将 `config/common.exposure` 按 33%/33%/34% 拆分，并为策略写入 `allowed_symbols`、`max_notional`；Commander 已读取并执行 guardrail（见 `intents/allocation.py` 新增 `_apply_guardrails`），确保超额目标会被裁剪或忽略。
+- ✅ **策略预算 & 约束（2025-11-10）**：运行 `scripts/firestore/setting_firestore.py` 将 `config/common.exposure` 按 33%/33%/34% 拆分，并为策略写入 `allowed_symbols`、`max_notional`；Commander 已读取并执行 guardrail（见 `intents/allocation.py` 新增 `_apply_guardrails`），确保超额目标会被裁剪或忽略。
 - ⚠️ **待完成**
-  1. **调度编排切换** —— ✅ 完成：`orchestrator-daily-run` 已在 us-central1 启用并通过干跑验证，asia-east1 的旧作业（`daily-reconciliation-job`、`eod-allocation-job`、`high-frequency-test-runner`）已删除；待运营确认后再将 Scheduler payload 从 `dryRun:true` 切换为实际下单。
+  1. **调度编排切换** —— ✅ 完成：`orchestrator-daily-run` 已在 us-central1 启用并通过干跑验证，asia-east1 的旧作业（`daily-reconciliation-job`、`eod-allocation-job`、`high-frequency-test-runner`）已删除；待运营确认后再将 Scheduler payload 从 `dryRun:true` 切换为实际下单（11-10 已在 paper 环境完成一次 `dryRun:false` 验证）。
   2. **多策略迁移**：✅ 两条主策略已完成迁移；⚠️ 其余生产策略仍停留在旧意图/脚本路径，需要依照第 3.1 节的流程补齐 Firestore 配置、预算与 guardrail，再纳入 orchestrator。
   3. **Secret & 凭证治理**：确认 Secret Manager 中 `ib-*-username/password` 的版本轮换策略，补充自动化检测（若凭证失效会导致 503）。
   5. **监控告警**：落地针对 orchestrator 503/超时的 Cloud Logging Metric 或 Error Reporting 告警，保证 Gateway 断线可及时通知运维。
@@ -62,8 +62,10 @@
   Next steps before going live
          1. Redeploy the Cloud Run service so the new guardrail logic is serving production traffic continuously (it spun up for the dry run but             lock it in via deploy).
          2. Plan multi-strategy migration: pick the next strategy, port it to the intent→Firestore pattern, and add its allowed_symbols/            max_notional. Only after a second wave is ready should you flip the scheduler payload.
-         3. Operational go/no-go: once ops agrees, run gcloud scheduler jobs update http orchestrator-daily-run --project=gold-gearbox-424413-k1
-            --location=us-central1 --message-body='{"strategies":["testsignalgenerator","spy_macd_vixy"],"dryRun":false,"runReconcile":true}' to             enable real orders, then monitor logs for the first live cycle.
+         3. Operational go/no-go: once ops agrees, run 
+            gcloud scheduler jobs update http orchestrator-daily-run --project=gold-gearbox-424413-k1
+            --location=us-central1 --message-body='{"strategies":["testsignalgenerator","spy_macd_vixy"],"dryRun":false,"runReconcile":true}' 
+          to             enable real orders, then monitor logs for the first live cycle.
   4. Follow-on tasks: implement secret rotation checks and Cloud Logging/Error Reporting alerts as listed in the progress doc so the      remaining TODOs (Secrets, monitoring) can be closed.
 
   Let me know when you’re ready to port the next strategy or if you want help wiring the scheduler to non-dry runs.

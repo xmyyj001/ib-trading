@@ -174,7 +174,7 @@ Cloud Build 的 `Deploy-to-Cloud-Run` 步骤会自动发布新修订。完成后
    ```
    gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="ib-paper"' \
       --project=gold-gearbox-424413-k1 \
-      --freshness=5m \
+      --freshness=10m \
       --format="table(timestamp, severity, textPayload)" 
       ```
 

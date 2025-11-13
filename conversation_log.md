@@ -94,3 +94,9 @@
     - Invoked the Cloud Run `/` endpoint with `dryRun:true` and observed Commander trimming `testsignalgenerator` from 2,689 → 894 shares per the `max_notional` limit, producing a single simulated SPY buy order with `missing=[]/stale=[]`.  
     - Cloud Logging confirms the expected sequence (“策略 → 对账 → Commander”) plus the new INFO line `Strategy testsignalgenerator target ... trimmed due to max_notional`, proving guardrails are active in production.  
     - Ready to flip the Scheduler payload to `dryRun:false` once remaining strategies migrate and operations approves.
+
+21. **Firestore 配置校准与实盘验证 (2025-11-10 16:10 UTC)**  
+    - 重新运行 `scripts/firestore/setting_firestore.py` 将 `config/common.exposure` 恢复为 0.33/0.33/0.34，并在 Cloud Console 验证 `config/common`, `config/paper` 等文档存在。  
+    - 更新 `query_firestore.py`，去掉强制按 `timestamp` 排序的限制，确保 `config` 集合可被列出。  
+    - 通过 `python query_firestore.py` 与 `gcloud logging read` 确认配置生效，并在 paper 环境执行一次 `dryRun:false` orchestrator（880 股 SPY 实盘下单）验证 Commander 与 Firestore guardrail 配置一致。
+
