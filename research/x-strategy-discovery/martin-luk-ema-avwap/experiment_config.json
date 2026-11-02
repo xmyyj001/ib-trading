@@ -1,0 +1,92 @@
+{
+  "config_version": "pre_registered_2026-11-02_v1",
+  "timestamp_utc": "2026-11-02",
+  "strategy_id": "martin-luk-ema-avwap-pullback",
+  "data": {
+    "provider": "IBKR ChatGPT connector get_price_history",
+    "instruments": [
+      {
+        "ticker": "GOOG",
+        "conid": 208813720
+      },
+      {
+        "ticker": "NVDA",
+        "conid": 4815747
+      },
+      {
+        "ticker": "TSLA",
+        "conid": 76792991
+      },
+      {
+        "ticker": "AMD",
+        "conid": 4391
+      },
+      {
+        "ticker": "META",
+        "conid": 107113386
+      },
+      {
+        "ticker": "PLTR",
+        "conid": 444857009
+      }
+    ],
+    "history_daily": {
+      "period": "ONE_YEAR",
+      "step": "ONE_DAY",
+      "outside_rth": false
+    },
+    "history_intraday": {
+      "period": "ONE_MONTH",
+      "step": "FIFTEEN_MINS",
+      "outside_rth": false
+    },
+    "timestamp_semantics": "UTC timestamps, group sessions by timestamp date (all bars within US RTH)",
+    "data_retention": "No raw IBKR data committed to public GitHub due to redistribution concerns"
+  },
+  "indicators": {
+    "daily_ema_short": 50,
+    "daily_ema_long": 150,
+    "intraday_ema_support": 21,
+    "atr_period": 14
+  },
+  "candidate_rules": {
+    "common": {
+      "daily_filter": "previous completed session close > EMA50 > EMA150",
+      "pullback": "max prior 26 intraday highs minus min low in prior 8 bars >= 1.0% of max",
+      "breakout": "signal current completed 15m close > max previous 4 bar highs",
+      "signal_bar_session_ordinal_max": 14,
+      "one_trade_per_symbol_per_session": true,
+      "entry": "following 15m bar open (same day only)",
+      "stop": "entry_raw - 1.0 * ATR14 at signal",
+      "target": "entry_raw + 1.5 * ATR14 at signal",
+      "exit": "first stop/target intrabar (stop assumed first if both touched), max 8 bars or session EOD, whichever comes first",
+      "cost_per_side_bps": 7,
+      "confidence": "fixed plausible exploration assumptions; not original trader rules"
+    },
+    "M0": "common only",
+    "M1": "M0 + prior 6-bar low <= 1.005 * previous intraday EMA21 and signal close > current EMA21",
+    "M2": "M1 + anchor = highest high within 40 bars prior to signal excluding most recent 3 bars, anchored VWAP calculated from anchor through preceding completed bar, prior 6-bar low <= 1.005 * AVWAP and signal close >= AVWAP"
+  },
+  "evaluation": {
+    "gross_net_returns": "trade-based equal weighted, no portfolio exposure netting",
+    "metrics": [
+      "trades",
+      "net_return_mean",
+      "net_return_median",
+      "win_rate",
+      "gross_return_mean",
+      "net_profit_factor",
+      "sample_date_range",
+      "per_symbol_counts"
+    ],
+    "limitations": [
+      "month-scale convenience sample",
+      "current survivors only",
+      "no point-in-time screened universe",
+      "only approximate fills/slippage",
+      "no out-of-sample or multiple regimes",
+      "no market impact",
+      "historical data may revise"
+    ]
+  }
+}
