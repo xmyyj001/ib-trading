@@ -1,0 +1,31 @@
+{
+  "version": "hypothesis-v1",
+  "strategy_id": "martin-luk-ema-avwap-pullback",
+  "hypotheses": [
+    {
+      "model": "M0",
+      "name": "trend_pullback_breakout",
+      "hypothesis": "Daily uptrend plus intraday pullback-and-breakout may produce positive net returns after costs",
+      "comparator": "No-trade baseline and report net trade return; no claim versus buy-and-hold on non-equivalent exposure"
+    },
+    {
+      "model": "M1",
+      "name": "M0_plus_ema21",
+      "hypothesis": "Adding an intraday 21 EMA support/reclaim filter improves out-of-sample or risk-adjusted performance versus M0",
+      "comparator": "M0"
+    },
+    {
+      "model": "M2",
+      "name": "M1_plus_causal_avwap",
+      "hypothesis": "A causal rolling-high anchored VWAP reclaim filter adds incremental value over the EMA-filtered model",
+      "comparator": "M1"
+    }
+  ],
+  "interpretation": "Exploratory hypothesis screen only. Small recent samples cannot establish alpha, inference, parameter stability, or Paper eligibility.",
+  "discipline": [
+    "Lock primary parameters before seeing prototype outcomes",
+    "Do not optimize on the first sample",
+    "Treat zero or few trades as insufficient evidence",
+    "Avoid claims of statistical significance"
+  ]
+}
