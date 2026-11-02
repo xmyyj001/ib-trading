@@ -32,7 +32,7 @@ for(let i=45;i<q.close.length-1;i++){
  const h=Math.max(...q.high.slice(i-26,i));
  if(h-Math.min(...q.low.slice(i-8,i))<0.01*h)continue;
  if(q.close[i]<=Math.max(...q.high.slice(i-4,i)))continue;
- const em= Math.min(...q.low.slice(i-5,i+1])<=1.005*q21[i-1]&&q.close[i]>q21[i];
+ const em= Math.min(...q.low.slice(i-5,i+1)<=1.005*q21[i-1]&&q.close[i]>q21[i];
  const start=Math.max(0,i-40),stop=i-3;
  let anchor=start;for(let k=start+1;k<stop;k++)if(q.high[k]>q.high[anchor])anchor=k;
  let num=0,den=0;for(let k=anchor;k<i;k++){num+=q.close[k]*q.volume[k];den+=q.volume[k]}
