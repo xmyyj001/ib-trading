@@ -1,0 +1,52 @@
+{
+  "schema_version": "idea-v1",
+  "strategy_id": "martin-luk-ema-avwap-pullback",
+  "title": "EMA + Anchored VWAP pullback, research interpretation (not an exact Martin Luk replica)",
+  "extracted_from": "Grok P1 package supplied by user, captured_at_utc=2026-10-31T03:50:00Z",
+  "provenance_status": "secondary_curation_not_independently_fully_verified",
+  "source_completeness": "partial",
+  "source_urls": [
+    "https://x.com/martinlukkt",
+    "https://martinluk.com/faq/",
+    "https://martinluk.com/qa/",
+    "https://martinluk.com/layout/",
+    "https://martinluk.com/screeners/",
+    "https://www.youtube.com/@martinlukkt"
+  ],
+  "core_mechanisms": [
+    {
+      "id": "trend",
+      "idea": "Trade liquid US growth/leader equities in favorable daily trend; use moving average context",
+      "attribution": "Grok P1: EMA 9,21,50,150 and screener descriptions; no independently authenticated first-person quote"
+    },
+    {
+      "id": "pullback_breakout",
+      "idea": "Wait for pullback toward support, then lower-timeframe breakout confirmation",
+      "attribution": "Grok P1: 5m/15m breakout after confluence"
+    },
+    {
+      "id": "anchored_vwap",
+      "idea": "Use anchored volume-weighted average price as additional contextual support",
+      "attribution": "Grok P1: anchor near base/swing highs; discretionary"
+    }
+  ],
+  "claimed_performance": {
+    "scope": "trader_competition_only",
+    "status": "not_strategy_attributable",
+    "note": "Grok reported 2025 USIC 969.8%; not treated as strategy backtest data"
+  },
+  "research_scope": "Test independent causal, fully specified M0 / M1 / M2 implementations; not a replication of the trader's complete playbook",
+  "unknowns": [
+    "AVWAP anchoring algorithm",
+    "support-confluence threshold",
+    "exact stop/exit",
+    "portfolio construction",
+    "true historically tradable universe"
+  ],
+  "constraints": [
+    "No live trades",
+    "No changes to existing Paper or Live systems",
+    "No ex-post anchor selection",
+    "Do not attribute prototype results to Martin Luk"
+  ]
+}
